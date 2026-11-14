@@ -4,7 +4,13 @@ A FaceTime security guardian for people who can't safely navigate the internet o
 
 They call Warden (a [Chert](https://www.trychert.com) FaceTime line) and say what they want: "check my email", "order a pizza", "is this letter a scam?". A cloud-style browser does it for them, while a security layer inspects every page and every action. Warden refuses to sign in on look-alike sites, refuses gift-card and wire requests, ignores instructions hidden in emails, and needs a spoken yes **plus a press of an approve button** before it spends, sends, deletes or changes security settings.
 
-Pitch: *Scammers target people who can't see the warning signs. Warden sees them for you.*
+Pitch: *Scammers target people who can't see the warning signs. Warden sees them for you, and only for you.*
+
+Only the enrolled owner can use it: the caller's **face and voice must both match** before any tool will run.
+
+![Warden's call screen: listening, working, scam blocked, not the owner](docs/warden-face-preview.png)
+
+See [USE_CASES.md](USE_CASES.md) for who it helps and the ten situations it handles, and [DEMO.md](DEMO.md) for a three-minute demo script.
 
 ## How it fits together
 
@@ -57,7 +63,7 @@ AGENT_NAME=<a name no other team uses>
 | Tier | Actions | Needs |
 | --- | --- | --- |
 | 0 | read, navigate, type a draft | nothing |
-| 1 | reversible changes (add to cart) | spoken yes |
+| 1 | reversible changes (add to cart) | the caller's spoken request on the call |
 | 2 | money, send, delete, card freeze, sign out devices | spoken yes **and** approve-button press (or caregiver approval) within 60 s, under the spending limit; caregiver notified |
 | 3 | typing passwords, codes, card or account numbers; changing recovery info; new payees; gift cards, wires, crypto | never |
 
@@ -69,7 +75,11 @@ Sites outside the safe list open **look-only**: the guard inspects them, and not
 
 **Untrusted content**: page and email text reaches the model only inside `<untrusted_page_content>` blocks. Even a fully compromised planner can't forward or delete mail, because those actions need the person's approval (tested).
 
-**Approve button**: a big on-screen button at `/button` (keyboard: Space or Enter). No Arduino is used. `POST /button` is the hook if you add a hardware button later.
+**Owner check** (`agent/verify.py`): on a FaceTime Video call the caller's face (OpenCV YuNet + SFace) and voice (WeSpeaker speaker embedding) are compared with the enrolled owner, about once a second, on this computer. Until both match, every tool except "stop" is refused in code, and a mismatch alerts the caregiver. `make models` downloads the models; `make enroll` makes the next call an enrollment call. Only numeric embeddings are stored (`data/owner/`), never photos or recordings. It matches identity, not liveness: a good photo or recording could fool it, so it sits on top of the approval rules instead of replacing them. `LEND_VERIFY=off` disables it.
+
+**Approve button**: a big on-screen button at `/button` (keyboard: Space or Enter).
+
+**Safety box (optional hardware)**: an Arduino Uno with a button, a rotary knob and a light (`hardware/`, `make box`, or `make box-sim` with no board). The button approves what Warden is waiting on; pressed at any other time it locks everything for 30 minutes, alerts the caregiver and starts an account check, and only the caregiver can clear it. The knob can lower the spending limit, never raise it. The sketch has only been run in the simulator, not on a board.
 
 **Account watch** (`orchestrator/audit.py`): reads bank transactions, sign-ins and the inbox, then flags small test charges followed by a large one, new merchants, amounts far above the usual (median/MAD), duplicates, new-device sign-ins, security notices and phishing emails. Wording is always "looks unusual, did you make this?". Set `AUDIT_INTERVAL_S` to run it on a timer.
 

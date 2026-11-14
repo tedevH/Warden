@@ -56,6 +56,9 @@ class TaskManager:
         self.tasks: dict[str, Task] = {}
         self.events: list[dict] = []
         self.on_call: dict[str, bool] = {}
+        self.lockdown_until = 0.0         # safety box: while in the future, only looking is allowed
+        self.box_cap: float | None = None  # safety box knob: can lower the spending limit, never raise it
+        self.alert_at = 0.0               # last time the scam guard stopped a page (the box flashes)
         self._tick = asyncio.Event()
         self._locks: dict[str, asyncio.Lock] = {}
         self._runners: dict[str, asyncio.Task] = {}
@@ -128,6 +131,55 @@ class TaskManager:
         if n:
             self.notify("*", f"Kill switch used: {n} task(s) cancelled.")
         return n
+
+    # ---------- safety box (hardware button, knob and light) ----------
+    def locked(self):
+        return max(0.0, self.lockdown_until - time.time())
+
+    def lockdown(self, user_id="margaret", minutes=30.0):
+        """Panic button: stop everything, refuse every action except looking, tell the caregiver, check accounts."""
+        already = self.locked() > 0
+        for t in list(self.tasks.values()):
+            self.cancel(t.id, "Stopped: the safety button was pressed.")
+        self.lockdown_until = time.time() + minutes * 60
+        if not already:
+            self.notify(user_id, f"Safety button pressed. Everything is locked for {minutes:g} minutes "
+                                 "and Warden is checking the accounts.")
+            self.create("Account check after the safety button", user_id, kind="audit", callback=True)
+        self.emit(None, "lockdown", "locked")
+        return {"locked_s": round(self.locked())}
+
+    def unlock(self, source="caregiver"):
+        was = self.locked() > 0
+        self.lockdown_until = 0.0
+        if was:
+            self.notify("*", f"Lockdown cleared by {source}.")
+        self.emit(None, "lockdown", "cleared")
+        return {"locked_s": 0}
+
+    def box_press(self, user_id="margaret"):
+        """One button, two jobs: approve what Warden is waiting on, otherwise call for help (lock down)."""
+        if self.locked() <= 0 and any(t.user_id == user_id and t.pending for t in self.tasks.values()):
+            return {"did": "approve", **self.button(user_id)}
+        return {"did": "lockdown", **self.lockdown(user_id)}
+
+    def box_knob(self, raw: int):
+        """Knob position 0-1023 -> a limit from $0 to the family's cap, in $5 steps. It can only lower the cap."""
+        cap = float(self.store.settings()["spending_cap"])
+        self.box_cap = min(cap, round(max(0, min(1023, raw)) / 1023 * cap / 5) * 5)
+        self._tick.set()
+        return {"limit": self.box_cap}
+
+    def spending_limit(self):
+        cap = float(self.store.settings()["spending_cap"])
+        return cap if self.box_cap is None else min(cap, self.box_cap)
+
+    def box_state(self, user_id="margaret"):
+        pend = next((t.pending for t in self.tasks.values() if t.user_id == user_id and t.pending), None)
+        light = ("locked" if self.locked() > 0 else "alert" if time.time() - self.alert_at < 12
+                 else "approve" if pend and pend["tier"] >= 2 else "ok")
+        return {"light": light, "locked_s": round(self.locked()), "limit": self.spending_limit(),
+                "pending": pend["description"] if pend else None}
 
     # ---------- approvals ----------
     def confirm(self, tid, source):
@@ -212,16 +264,19 @@ class TaskManager:
                 return decide(False, "blocked", "The task was cancelled.")
             if c.tier == 0:
                 return decide(True, "allowed", c.reason)
+            if self.locked() > 0:
+                return decide(False, "blocked", "Your safety button was pressed, so everything is locked. "
+                                                "I can look, but I won't click, send or pay until the lock is cleared.")
             if c.tier >= 3:
                 self.notify(task.user_id, f"Blocked: {c.reason} ({policy.host_of(action.url)})")
                 return decide(False, "blocked", c.reason)
             desc = policy.describe(c, action)
             if c.kind == "money":
-                cap = float(s["spending_cap"])
+                cap = self.spending_limit()
                 if c.amount is None:
                     return decide(False, "blocked", "I couldn't tell how much this would cost, so I won't pay.")
                 if task.spent + c.amount > cap:
-                    why = f"${c.amount:,.2f} is over the ${cap:,.2f} spending limit your family set."
+                    why = f"${c.amount:,.2f} is over the ${cap:,.2f} spending limit."
                     self.notify(task.user_id, f"Blocked payment over the limit: {desc}")
                     return decide(False, "blocked", why)
             ok, how = await self._approve(task, c, desc, float(s["confirm_window_s"]))
@@ -252,6 +307,7 @@ class TaskManager:
                                   "stopped" if stop else "flagged",
                                   "; ".join(r["detail"] for r in v["reasons"])[:500])
             if stop:
+                self.alert_at = time.time()
                 if self.store.add_finding(task.user_id, task.id, "scam_page", "high", f"Scam page blocked: {host}",
                                           v["reasons"], v["plain_explanation"], fkey=f"scam_page:{host}"):
                     self.notify(task.user_id, f"Warden stopped a scam page: {host}. {v['plain_explanation']}")

@@ -51,6 +51,20 @@ class LendTools:
     async def settings(self):
         return (await self.http.get("/settings")).json()
 
+    async def notify(self, text):
+        """Alert the caregiver (dashboard, and iMessage when Chert is live)."""
+        try:
+            await self.http.post("/notify", json={"user_id": self.user_id, "text": text})
+        except httpx.HTTPError:
+            pass
+
+    async def box(self):
+        """Safety box state: {"light", "locked_s", "limit", "pending"}."""
+        try:
+            return (await self.http.get("/box", params={"user_id": self.user_id})).json()
+        except (httpx.HTTPError, ValueError):
+            return {}
+
     async def _wait(self, timeout=100.0, past_pending=None):
         """Wait until the task finishes or needs an approval (other than `past_pending`)."""
         end, t = time.time() + timeout, None
@@ -63,6 +77,12 @@ class LendTools:
                 return t
             p = t.get("pending")
             if t["state"] == "awaiting_confirm" and p and p["expires"] != past_pending:
+                if p["tier"] == 1:
+                    # Small, undoable steps (add to cart): the caller's own spoken request on this call is the
+                    # yes. Money, sending and deleting (tier 2) still stop here for a yes plus the button.
+                    await self.http.post(f"/tasks/{self.task_id}/confirm", json={"source": "voice"})
+                    past_pending = p["expires"]
+                    continue
                 return t
             await asyncio.sleep(0.4)
         return t

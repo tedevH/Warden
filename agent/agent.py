@@ -32,17 +32,31 @@ from livekit.agents.utils import images  # noqa: E402
 
 from agent import chert_adapter  # noqa: E402
 from agent.face import Face  # noqa: E402
-from agent.prompts import GREETING, INSTRUCTIONS  # noqa: E402
+from agent.prompts import (ENROLL_GREETING, ENROLLED, GREETING, INSTRUCTIONS, LOCKDOWN_GREETING, STRANGER,
+                           VERIFIED, VERIFY_GREETING)  # noqa: E402
 from agent.tools import LendTools  # noqa: E402
+from agent.verify import OwnerCheck, models_present  # noqa: E402
 
 log = logging.getLogger("lend.agent")
 AGENT_NAME = os.getenv("AGENT_NAME", "lend-agent")
 
 
 class Warden(Agent):
-    def __init__(self, tools: LendTools):
+    def __init__(self, tools: LendTools, check: OwnerCheck | None = None):
         super().__init__(instructions=INSTRUCTIONS)
         self.t = tools
+        self.check = check
+
+    def _denied(self) -> str | None:
+        """Owner check, enforced here in code: no verified owner on the call, no tools."""
+        if self.check is None or self.check.status == "owner":
+            return None
+        log.info("TOOL REFUSED: caller is %s (%s)", self.check.status, self.check.why)
+        if self.check.status == "stranger":
+            return ("REFUSED: this person is not the owner. " + self.check.why +
+                    " Tell them you only work for your owner and can't help. Do not try again.")
+        return ("REFUSED: the owner is not verified yet. " + self.check.why +
+                " Ask them to look at the camera and keep talking for a few seconds, then try again.")
 
     @function_tool()
     async def start_task(self, context: RunContext, goal: str) -> str:
@@ -51,16 +65,22 @@ class Warden(Agent):
         Args:
             goal: What to do, in plain words, e.g. "read my inbox".
         """
+        if (no := self._denied()):
+            return no
         return await self.t.start_task(goal)
 
     @function_tool()
     async def confirm(self, context: RunContext) -> str:
         """Record the caller's spoken yes for the approval you just read out. Only after they say yes."""
+        if (no := self._denied()):
+            return no
         return await self.t.confirm()
 
     @function_tool()
     async def wait_for_approval(self, context: RunContext) -> str:
         """After asking the caller to press their approve button, wait until they press it."""
+        if (no := self._denied()):
+            return no
         return await self.t.wait_for_approval()
 
     @function_tool()
@@ -71,16 +91,22 @@ class Warden(Agent):
     @function_tool()
     async def check_accounts(self, context: RunContext) -> str:
         """Review the caller's bank and email for unusual charges, new sign-ins and scam emails."""
+        if (no := self._denied()):
+            return no
         return await self.t.check_accounts()
 
     @function_tool()
     async def read_paper(self, context: RunContext) -> str:
         """Look at a letter, text or screen the caller is holding up to the camera and say if it's a scam."""
+        if (no := self._denied()):
+            return no
         return await self.t.read_paper()
 
     @function_tool()
     async def send_screenshot(self, context: RunContext) -> str:
         """Text the caller a large, high-contrast picture of the page Warden is on (for low vision)."""
+        if (no := self._denied()):
+            return no
         return await self.t.send_screenshot()
 
 
@@ -106,6 +132,18 @@ async def entry(ctx: agents.JobContext):
     face = Face()
     await face.publish(ctx.room)  # FaceTime Video waits on a holding screen until the agent publishes video
     log.info("face video published")
+    # Owner check: face + voice must match the enrolled owner before any tool will run.
+    check = None
+    if os.getenv("LEND_VERIFY", "both") != "off":
+        if models_present():
+            check = OwnerCheck()
+            await asyncio.to_thread(check.load)
+        else:
+            log.warning("OWNER CHECK IS OFF: models/ is missing. Run `make models` to turn it on.")
+    enrolling = bool(check) and (not check.enrolled() or check.enroll_requested())
+    if check:
+        face.badge = "Learning you" if enrolling else "Checking it's you"
+        log.info("owner check: %s", "ENROLLMENT CALL" if enrolling else "on")
     if os.getenv("LEND_LINE_TEST") == "1":
         from agent import linetest
         await linetest.run(ctx, caller, face)
@@ -178,6 +216,13 @@ async def entry(ctx: agents.JobContext):
     async def watch(track):
         async for ev in rtc.VideoStream(track):
             latest["frame"] = ev.frame
+            if check:
+                check.feed_frame(ev.frame)
+
+    async def verify_audio(track):
+        import numpy as np
+        async for ev in rtc.AudioStream(track, sample_rate=16000, num_channels=1):
+            check.feed_audio(np.frombuffer(ev.frame.data, dtype=np.int16))
 
     for pub in caller.track_publications.values():
         log.info("CALLER TRACK: name=%r kind=%s source=%s muted=%s", pub.name, pub.kind, pub.source, pub.muted)
@@ -201,6 +246,8 @@ async def entry(ctx: agents.JobContext):
             log.info("CALLER TRACK SUBSCRIBED: name=%r kind=%s source=%s", _pub.name, track.kind, _pub.source)
         if track.kind == rtc.TrackKind.KIND_AUDIO and participant.identity == caller.identity:
             latest.setdefault("audio", []).append(asyncio.create_task(audio_level(track, _pub.name)))
+            if check:
+                latest["audio"].append(asyncio.create_task(verify_audio(track)))
         if track.kind == rtc.TrackKind.KIND_VIDEO and participant.identity == caller.identity:
             log.info("caller video track subscribed")
             latest["task"] = asyncio.create_task(watch(track))
@@ -215,6 +262,8 @@ async def entry(ctx: agents.JobContext):
     await tools.presence(True)
 
     async def on_end():
+        if check:
+            check.stop()
         face.stop()
         chert_adapter.set_frame_source(None)
         if latest.get("task"):
@@ -225,17 +274,52 @@ async def entry(ctx: agents.JobContext):
 
     ctx.add_shutdown_callback(on_end)
     await session.start(
-        room=ctx.room, agent=Warden(tools),
+        room=ctx.room, agent=Warden(tools, check),
         room_options=room_io.RoomOptions(participant_identity=caller.identity, close_on_disconnect=True),
     )
 
     greeted = asyncio.Event()
+    locked = (await tools.box()).get("locked_s", 0) > 0  # the safety button was pressed before this call
+
+    def on_owner(status, why):
+        """Owner check changed its mind: update the badge, and say so once the call is live."""
+        face.badge = {"owner": "Owner verified", "stranger": "Not the owner"}.get(status, "Checking it's you")
+        face.badge_bad = status == "stranger"
+        if not greeted.is_set():
+            return
+        if status == "owner":
+            session.generate_reply(instructions=VERIFIED)
+        elif status == "stranger":
+            session.generate_reply(instructions=STRANGER)
+            asyncio.create_task(tools.notify(f"Someone who is not the owner tried to use Warden. {why}"))
+
+    async def do_enroll():
+        ok, msg = await check.enroll(timeout=60)
+        if ok:
+            face.badge = "Owner verified"
+            check.on_change = on_owner
+            check.start()
+            session.generate_reply(instructions=ENROLLED)
+        else:
+            session.generate_reply(instructions=f"Enrollment did not work. Tell them: {msg} Then ask them to call again.")
+
+    if check and not enrolling:
+        check.on_change = on_owner
+        check.start()
 
     def maybe_greet(*_):
         if not greeted.is_set() and bridge_ready(ctx.room.metadata):
             greeted.set()
             log.info("FaceTime ready: greeting")
-            if opening:
+            if enrolling:
+                session.generate_reply(instructions=ENROLL_GREETING)
+                latest["enroll"] = asyncio.create_task(do_enroll())
+            elif check and check.status != "owner":
+                session.generate_reply(instructions=VERIFY_GREETING)
+            elif locked:
+                face.alert = True
+                session.generate_reply(instructions=LOCKDOWN_GREETING)
+            elif opening:
                 if realtime:
                     session.generate_reply(instructions=f"Say exactly this to the caller: {opening}")
                 else:

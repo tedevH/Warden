@@ -2,7 +2,7 @@ PY ?= .venv/bin/python
 MOCK_PORT ?= 8100
 CHERT ?= npx --yes @trychert/facetime@0.1.0-beta.20
 
-.PHONY: setup vault mocks orchestrator worker agent chert harness button demo redteam test
+.PHONY: setup vault mocks orchestrator worker agent chert harness button demo redteam test box box-sim models enroll
 
 setup:        ## create .venv, install deps and Chromium, create .env and the login vault
 	uv venv --python 3.12 .venv
@@ -34,6 +34,21 @@ harness:      ## talk to Warden by typing (no Chert): same tools as the call
 
 button:       ## open the approve-button page
 	open http://127.0.0.1:8200/button
+
+models:       ## download the face and voice matching models for the owner check (about 65 MB, runs locally)
+	@mkdir -p models
+	curl -sL -o models/yunet.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+	curl -sL -o models/sface.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
+	curl -sL -o models/speaker.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34.onnx
+
+enroll:       ## make the next FaceTime Video call an enrollment call: Warden learns the caller as its owner
+	@mkdir -p data/owner && touch data/owner/ENROLL && echo "Next call enrolls the owner. Call on FaceTime Video."
+
+box:          ## safety box: connect the Arduino (button, knob, light) to Warden
+	$(PY) hardware/bridge.py
+
+box-sim:      ## safety box without an Arduino: type p (press), k 512 (knob), u (unlock)
+	$(PY) hardware/bridge.py --sim
 
 demo:         ## everything except Chert: mock sites + orchestrator + dashboard + button page + text harness
 	@trap 'kill 0' INT TERM EXIT; \

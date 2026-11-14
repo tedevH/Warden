@@ -30,6 +30,9 @@
   <span class="badge" id="mode"></span>
   <button class="kill" id="kill" title="Cancel every running task">■ Stop everything</button>
 </header>
+<div id="lock" style="display:none;background:var(--bad);color:#fff;padding:12px 20px;font-size:18px">
+  🔒 <strong>Safety button pressed.</strong> Everything is locked for <span id="lockleft"></span>.
+  <button id="unlock" style="margin-left:12px">Clear lockdown (caregiver)</button></div>
 <main>
 <div>
   <section class="panel" id="approvals-panel" style="display:none"><h2>Waiting for approval</h2><div id="approvals"></div></section>
@@ -63,6 +66,8 @@ let settingsLoaded = false;
 
 function render(s) {
   $('mode').textContent = 'Chert: ' + s.chert_mode;
+  $('lock').style.display = s.box.locked_s > 0 ? '' : 'none';
+  $('lockleft').textContent = Math.ceil(s.box.locked_s / 60) + ' more min';
   $('who').textContent = `Watching over ${s.settings.profile.name} · caregiver ${s.settings.caregiver.name}`;
   $('approvals-panel').style.display = s.pending.length ? '' : 'none';
   $('approvals').innerHTML = s.pending.map(p => {
@@ -99,6 +104,7 @@ $('start').onclick = () => { const g = $('goal').value.trim(); if (g) { post('/t
 $('goal').addEventListener('keydown', e => { if (e.key === 'Enter') $('start').click(); });
 $('audit').onclick = () => post('/audit');
 $('kill').onclick = () => post('/kill');
+$('unlock').onclick = () => post('/unlock', {source: 'caregiver'});
 $('save').onclick = async () => {
   await post('/settings', {spending_cap: parseFloat($('cap').value) || 0,
     allowlist: $('allow').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),

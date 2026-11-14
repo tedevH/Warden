@@ -135,9 +135,35 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
         tm.on_call[payload.get("user_id", "margaret")] = bool(payload.get("on_call"))
         return {"ok": True}
 
+    @app.post("/notify")
+    async def notify(payload: dict = Body(...)):
+        tm.notify(payload.get("user_id", "margaret"), str(payload.get("text", ""))[:300])
+        return {"ok": True}
+
     @app.post("/kill")
     async def kill():
         return {"cancelled": tm.kill_all()}
+
+    # ---- safety box (hardware/bridge.py talks to these) ----
+    @app.get("/box")
+    async def box(user_id: str = "margaret"):
+        return tm.box_state(user_id)
+
+    @app.post("/box/press")
+    async def box_press(payload: dict = Body(default={})):
+        return tm.box_press(payload.get("user_id", "margaret"))
+
+    @app.post("/box/knob")
+    async def box_knob(payload: dict = Body(...)):
+        return tm.box_knob(int(payload.get("value", 0)))
+
+    @app.post("/lockdown")
+    async def lockdown(payload: dict = Body(default={})):
+        return tm.lockdown(payload.get("user_id", "margaret"), float(payload.get("minutes", 30)))
+
+    @app.post("/unlock")
+    async def unlock(payload: dict = Body(default={})):
+        return tm.unlock(payload.get("source", "caregiver"))
 
     @app.get("/findings")
     async def findings():
@@ -161,6 +187,7 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
     @app.post("/admin/reset")
     async def reset():
         tm.kill_all()
+        tm.lockdown_until, tm.box_cap, tm.alert_at = 0.0, None, 0.0
         tm.tasks.clear()
         tm.store.wipe()
         return {"ok": True}
@@ -173,7 +200,7 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
                 "pending": [{"task_id": t.id, "goal": t.goal, **t.pending} for t in tasks if t.pending],
                 "findings": tm.store.findings(40), "actions": tm.store.actions(limit=80),
                 "notifications": tm.store.notifications(20), "settings": tm.store.settings(),
-                "on_call": tm.on_call, "chert_mode": chert_adapter.mode()}
+                "on_call": tm.on_call, "box": tm.box_state(), "chert_mode": chert_adapter.mode()}
 
     return app
 
