@@ -28,8 +28,16 @@ from livekit.agents.utils import http_context  # noqa: E402
 
 URL, KEY, SECRET = (os.environ[k] for k in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"))
 AGENT = os.getenv("AGENT_NAME", "lend-agent")
+def _opt(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
+FACE = _opt("--face")                  # an image file shown as the caller's camera (tests the owner check)
+VOICE = _opt("--voice", "a")           # a = the usual test voice, b = a different speaker
+WAIT = float(_opt("--wait", "20"))     # seconds to keep listening after speaking
 OUTBOUND = "--outbound" in sys.argv   # simulate a call Warden places: agent first, bridge joins afterwards
-ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+_skip = {i + 1 for i, a in enumerate(sys.argv) if a in ("--face", "--voice", "--wait")}
+ARGS = [a for i, a in enumerate(sys.argv) if i and not a.startswith("--") and i not in _skip]
 LINE = ARGS[0] if ARGS else ("No, I did not make that charge. Please freeze my card right away." if OUTBOUND
                              else "Check my email please.")
 OPENING = "Hi, it's Warden. I'm calling because I noticed something. A four hundred dollar charge looks unusual. Did you make it?"
@@ -78,13 +86,30 @@ async def main():
 
     # our "phone microphone"
     async with http_context.open():
-        tts = inference.TTS(model="fishaudio/s2.1-pro", voice="fa4c9eb3dccc4806b382b40d61c6b10a")
+        tts = (inference.TTS(model="fishaudio/s2.1-pro", voice="fa4c9eb3dccc4806b382b40d61c6b10a") if VOICE == "a"
+               else inference.TTS(model="cartesia/sonic-3"))
         frames = [ev.frame async for ev in tts.synthesize(LINE)]
     sr = frames[0].sample_rate
     mic = rtc.AudioSource(sr, 1)
     await room.local_participant.publish_track(
         rtc.LocalAudioTrack.create_audio_track("facetime-remote-audio", mic),
         rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE))
+    if FACE:   # the caller's camera: one photo, repeated, like someone holding still
+        from PIL import Image
+        img = Image.open(FACE).convert("RGBA")
+        img.thumbnail((720, 960))
+        cam = rtc.VideoSource(img.width, img.height)
+        await room.local_participant.publish_track(
+            rtc.LocalVideoTrack.create_video_track("facetime-remote-video", cam),
+            rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_CAMERA))
+        vf = rtc.VideoFrame(img.width, img.height, rtc.VideoBufferType.RGBA, img.tobytes())
+
+        async def camera():
+            while True:
+                cam.capture_frame(vf)
+                await asyncio.sleep(0.2)
+        asyncio.create_task(camera())
+        print(f"  camera shows {Path(FACE).name}")
     silence = rtc.AudioFrame(b"\0\0" * (sr // 50), sr, 1, sr // 50)
 
     async def feed_silence(seconds):
@@ -110,7 +135,7 @@ async def main():
     print(f"  saying: {LINE!r}")
     for f in frames:
         await mic.capture_frame(f)
-    await feed_silence(20)
+    await feed_silence(WAIT)
     print(f"2. caller -> Warden -> caller (reply): peak {heard['peak']:.3f}, {heard['loud_frames']} loud frames  "
           f"{'PASS' if heard['loud_frames'] > 20 else 'FAIL'}  (check the agent log for HEARD/SAID)")
     await room.disconnect()
