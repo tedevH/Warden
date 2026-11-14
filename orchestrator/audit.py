@@ -183,8 +183,8 @@ async def run_audit(tm, task, session) -> str:
     new_high = [f for f in fresh if f["severity"] == "high"]
     for f in new_high:
         tm.notify(task.user_id, f"{f['title']}. {f['explanation']}")
-    money_alert = (next((f for f in new_high if f["kind"] in ("test_charges", "new_merchant")), None)
-                   or (new_high[0] if new_high else None))       # money first, then anything else serious and new
+    # Phone only about money: scam emails sit in every inbox and go on the report, not a phone call.
+    money_alert = next((f for f in new_high if f["kind"] in ("test_charges", "new_merchant")), None)
     if money_alert and tm.adapter and not tm.on_call.get(task.user_id):
         phone = tm.store.settings()["profile"].get("phone", "") or os.getenv("USER_PHONE", "")
         line = f"Hi, it's Warden. I'm calling because I noticed something. {money_alert['explanation']}"
