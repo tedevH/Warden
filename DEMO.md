@@ -46,6 +46,9 @@ No Chert? `make demo` lets you type the caller's lines instead.
 Shortcut for beat 5: say *"I want my usual"* and Warden answers "Your usual is a large pepperoni. Do you want that
 or something different?"
 
+Credits line to say at the end: *"Warden runs on a Chert FaceTime line, talks and browses with Grok from xAI, and
+anchors its action log on Solana."* (Full list in the README under "Built with".)
+
 Optional extras if there's time:
 
 - **Account watch.** On the mock admin page click **Inject fraud**, then say *"Did anything strange happen at my

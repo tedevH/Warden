@@ -12,6 +12,22 @@ Only the enrolled owner can use it: the caller's **face and voice must both matc
 
 See [USE_CASES.md](USE_CASES.md) for who it helps and the ten situations it handles, and [DEMO.md](DEMO.md) for a three-minute demo script.
 
+## Built with
+
+| Technology | What Warden uses it for |
+| --- | --- |
+| **[Chert](https://www.trychert.com)** | The FaceTime line. It gives Warden a real number and bridges each call's audio and video to the agent. |
+| **Grok (xAI)** | The voice you talk to (Grok Voice, speech to speech) and the planner that drives the browser (Grok 4.3). |
+| **Solana** | The tamper-evident action log. Fingerprints of every action are anchored on devnet with the Memo program. |
+| **LiveKit** | Agents framework and real-time rooms; LiveKit Inference serves the models. |
+| **Anam** | The optional real-human video avatar on the call. |
+| **Gemini (Google)** | Reading a letter or screen held up to the camera. |
+| **OpenCV (YuNet, SFace) and WeSpeaker via sherpa-onnx** | Owner check: face and voice matching, run locally. |
+| **Playwright, FastAPI, SQLite** | The browser worker, the orchestrator and dashboard, and storage. |
+| **Arduino Uno** | Optional safety box (button, knob, light); simulator-tested only. |
+
+Built with Claude Code as the coding agent.
+
 ## How it fits together
 
 ```
