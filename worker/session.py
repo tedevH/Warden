@@ -49,7 +49,7 @@ class ConsoleGate:
     async def __call__(self, a: Action) -> Decision:
         t = a.target or {}
         if a.kind == "type" and t.get("role") == "password":
-            return Decision(False, "Lend never types passwords. Use the login tool, which fills saved logins.", 3, "credential")
+            return Decision(False, "Warden never types passwords. Use the login tool, which fills saved logins.", 3, "credential")
         if a.kind == "click" and RISKY.search(f'{t.get("name", "")} {t.get("form", "")}'):
             if self.auto_yes:
                 return Decision(True, "auto-approved (--yes)", 2, "risky")
@@ -191,7 +191,7 @@ class BrowserSession:
         if cred is None:
             await self._check(Action("login", snap.url, {"role": "password", "name": "login form"},
                                      page_text=snap.text))
-            raise Blocked(f"No saved login for {snap.origin}. Lend only signs in on the exact site a login "
+            raise Blocked(f"No saved login for {snap.origin}. Warden only signs in on the exact site a login "
                           f"was saved for, so it will not enter a password here.")
         pw_el = next(e for e in snap.elements if e["role"] == "password")
         await self._check(Action("login", snap.url, pw_el, page_text=snap.text))

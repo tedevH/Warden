@@ -29,7 +29,7 @@ agent:        ## voice agent for the Chert line (needs LIVEKIT_* in .env.local a
 chert:        ## connect the Chert FaceTime line to the agent
 	$(CHERT) dev
 
-harness:      ## talk to Lend by typing (no Chert): same tools as the call
+harness:      ## talk to Warden by typing (no Chert): same tools as the call
 	$(PY) -m agent.harness
 
 button:       ## open the approve-button page
@@ -42,7 +42,7 @@ demo:         ## everything except Chert: mock sites + orchestrator + dashboard 
 	sleep 3; (open http://localhost:$(MOCK_PORT) http://127.0.0.1:8200/button http://127.0.0.1:8200 2>/dev/null || true); \
 	$(PY) -m agent.harness
 
-redteam:      ## attack Lend with every scam and print a scorecard (no keys, no AI)
+redteam:      ## attack Warden with every scam and print a scorecard (no keys, no AI)
 	$(PY) -m orchestrator.redteam
 
 test:         ## run the test suite

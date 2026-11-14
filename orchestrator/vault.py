@@ -6,7 +6,7 @@
     python -m orchestrator.vault list         # origins only, never values
 
 File: data/vault.enc (Fernet, key from LEND_VAULT_KEY). Without a key or file, the vault is empty,
-so Lend can't sign in anywhere.
+so Warden can't sign in anywhere.
 """
 import json
 import os

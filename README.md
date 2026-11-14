@@ -1,10 +1,10 @@
-# Lend
+# Warden
 
 A FaceTime security guardian for people who can't safely navigate the internet on their own.
 
-They call Lend (a [Chert](https://www.trychert.com) FaceTime line) and say what they want: "check my email", "order a pizza", "is this letter a scam?". A cloud-style browser does it for them, while a security layer inspects every page and every action. Lend refuses to sign in on look-alike sites, refuses gift-card and wire requests, ignores instructions hidden in emails, and needs a spoken yes **plus a press of an approve button** before it spends, sends, deletes or changes security settings.
+They call Warden (a [Chert](https://www.trychert.com) FaceTime line) and say what they want: "check my email", "order a pizza", "is this letter a scam?". A cloud-style browser does it for them, while a security layer inspects every page and every action. Warden refuses to sign in on look-alike sites, refuses gift-card and wire requests, ignores instructions hidden in emails, and needs a spoken yes **plus a press of an approve button** before it spends, sends, deletes or changes security settings.
 
-Pitch: *Scammers target people who can't see the warning signs. Lend sees them for you.*
+Pitch: *Scammers target people who can't see the warning signs. Warden sees them for you.*
 
 ## How it fits together
 
@@ -45,7 +45,7 @@ AGENT_NAME=<a name no other team uses>
 | `make demo` | Mock sites + orchestrator + dashboard + approve-button page + text harness. No Chert, no hardware. |
 | `make mocks` | Mock bank, mail, pizza and four scam sites on :8100 (admin and **Inject fraud** at http://localhost:8100) |
 | `make orchestrator` | Task API, safety gate, dashboard at http://127.0.0.1:8200, approve button at `/button` |
-| `make harness` | Talk to Lend by typing. Same tools as the call. `--no-llm` for keyword mode. |
+| `make harness` | Talk to Warden by typing. Same tools as the call. `--no-llm` for keyword mode. |
 | `make agent` + `make chert` | The real FaceTime line (also needs `make mocks` and `make orchestrator`) |
 | `make worker GOAL="read my inbox"` | One goal straight through the worker, without the orchestrator |
 | `make redteam` | Scam scorecard (used by the Grok Bot automation, see `GROK_BOT.md`) |
@@ -90,7 +90,7 @@ See `.env.example`. `.env`, `.env.local` and `data/` are gitignored. Mock-site l
 
 Everything Chert-specific is in `agent/chert_adapter.py`.
 
-1. `TODO(chert)` **iMessage images**: the trial `shared-messages` API documents text only, so enlarged screenshots are sent in mock mode only. Live, Lend says it can't send the picture.
+1. `TODO(chert)` **iMessage images**: the trial `shared-messages` API documents text only, so enlarged screenshots are sent in mock mode only. Live, Warden says it can't send the picture.
 2. `TODO(chert)` **show_on_call**: no documented way to show an image mid-call. Falls back to `send_imessage`.
 3. `TODO(chert)` **Outbound callback**: written from [the outbound docs](https://docs.trychert.com/facetime/outbound) (agent dispatch, bridge token, `POST /calls`, wait for `bridge_ready`) but **not yet verified on a real line**. It needs a project API key.
 4. `TODO(chert)` **Caller camera**: `read_paper` uses the caller's video track when the line has caller capture enabled. Not verified on this line; without a track it asks the person to read the letter aloud.
@@ -105,7 +105,7 @@ Everything Chert-specific is in `agent/chert_adapter.py`.
 - Chert trial and Shared calls are capped at 5 minutes. Tasks keep running in the orchestrator after a call ends.
 - The laptop must stay on: the agent, orchestrator and browser run on it.
 - Browser agents are slow and sometimes wrong. Scripted skills cover the demo paths; step and time limits stop runaways.
-- Real banks block automated browsers and need 2FA. Lend is demoed on mock sites and never touches real money.
+- Real banks block automated browsers and need 2FA. Warden is demoed on mock sites and never touches real money.
 - Fraud scoring and look-alike detection have false positives (for example, a new shop you really used, or a domain that happens to contain a brand name).
 - The dashboard has no login. It listens on this computer only.
 - Spend baselines use SQLite. The optional Tiger Data hypertable is not built.

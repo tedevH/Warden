@@ -1,10 +1,10 @@
-"""Self-test of Lend's call audio without Chert: act like Chert's FaceTime bridge in a fresh LiveKit room.
+"""Self-test of Warden's call audio without Chert: act like Chert's FaceTime bridge in a fresh LiveKit room.
 
     .venv/bin/python scripts/fake_caller.py ["what to say"]
 
 Dispatches the running agent (AGENT_NAME) into a new room, joins as `chert-bridge-selftest` publishing a
 `facetime-remote-audio` track, sets {"chert_bridge_ready": true} like chert dev does, then:
-  1. measures Lend's greeting audio, 2. speaks a line (TTS), 3. measures Lend's reply audio.
+  1. measures Warden's greeting audio, 2. speaks a line (TTS), 3. measures Warden's reply audio.
 Prints a PASS/FAIL line for each direction.
 """
 import asyncio
@@ -89,7 +89,7 @@ async def main():
     print("  sent chert_bridge_ready")
     await feed_silence(10)
     greet = dict(heard)
-    print(f"1. Lend -> caller (greeting): peak {greet['peak']:.3f}, {greet['loud_frames']} loud frames  "
+    print(f"1. Warden -> caller (greeting): peak {greet['peak']:.3f}, {greet['loud_frames']} loud frames  "
           f"{'PASS' if greet['loud_frames'] > 20 else 'FAIL'}")
 
     heard.update(peak=0.0, loud_frames=0)
@@ -97,7 +97,7 @@ async def main():
     for f in frames:
         await mic.capture_frame(f)
     await feed_silence(20)
-    print(f"2. caller -> Lend -> caller (reply): peak {heard['peak']:.3f}, {heard['loud_frames']} loud frames  "
+    print(f"2. caller -> Warden -> caller (reply): peak {heard['peak']:.3f}, {heard['loud_frames']} loud frames  "
           f"{'PASS' if heard['loud_frames'] > 20 else 'FAIL'}  (check the agent log for HEARD/SAID)")
     await room.disconnect()
     await lk.room.delete_room(api.DeleteRoomRequest(room=room_name))

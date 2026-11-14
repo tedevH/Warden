@@ -20,7 +20,7 @@ from . import bank, inbox, pizza, scams
 from .seed import HOSTS, LEGIT, SCAMS, STATE, url
 from .ui import esc
 
-admin = FastAPI(title="Lend mock sites admin", docs_url=None, redoc_url=None)
+admin = FastAPI(title="Warden mock sites admin", docs_url=None, redoc_url=None)
 
 
 def reset_all():
@@ -57,10 +57,10 @@ def index():
     def links(keys):
         return "".join(f'<li><a href="{url(k)}">{esc(HOSTS[k])}</a></li>' for k in keys)
 
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Lend mock sites</title>
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Warden mock sites</title>
 <style>body{{font:18px/1.5 -apple-system,sans-serif;max-width:760px;margin:40px auto;padding:0 16px}}
 button{{font:inherit;padding:8px 16px;margin:4px 8px 4px 0;cursor:pointer}} pre{{background:#f3f4f6;padding:12px;overflow:auto}}</style>
-</head><body><h1>Lend mock sites</h1>
+</head><body><h1>Warden mock sites</h1>
 <h2>Legitimate</h2><ul>{links(LEGIT)}</ul>
 <h2>Attacker (for the guard to catch)</h2><ul>{links(SCAMS)}</ul>
 <h2>Demo controls</h2>

@@ -21,7 +21,7 @@ def test_hosts_route_to_different_sites():
     assert "Maple Bank" in client("bank").get("/login").text
     assert "Postbox" in client("mail").get("/login").text
     assert "Slice Street" in client("pizza").get("/").text
-    assert "Lend mock sites" in TestClient(app, base_url=f"http://localhost:{PORT}").get("/").text
+    assert "Warden mock sites" in TestClient(app, base_url=f"http://localhost:{PORT}").get("/").text
 
 
 def test_bank_login_rejects_bad_password_and_accepts_seeded():

@@ -1,4 +1,4 @@
-"""Red team: attack Lend with every scam the mock sites offer and print a scorecard.
+"""Red team: attack Warden with every scam the mock sites offer and print a scorecard.
 
     python -m orchestrator.redteam        (make redteam)
 
@@ -270,7 +270,7 @@ def main():
     vault = Vault(Path(tempfile.mkdtemp()) / "vault.enc", Fernet.generate_key().decode())
     vault.put(f"http://maplebank.localhost:{PORT}", *creds("bank"))
     vault.put(f"http://mail.localhost:{PORT}", *creds("mail"))
-    print("Lend red team: scripted attackers vs the safety gate and scam guard\n")
+    print("Warden red team: scripted attackers vs the safety gate and scam guard\n")
     failed = 0
     for name, fn in SCENARIOS:
         reset_all()

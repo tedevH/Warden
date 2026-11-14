@@ -1,4 +1,4 @@
-"""Local text harness: talk to Lend by typing. Same tools as the FaceTime agent, no Chert needed.
+"""Local text harness: talk to Warden by typing. Same tools as the FaceTime agent, no Chert needed.
 
     python -m agent.harness              Grok decides what to do (needs LIVEKIT_* in .env.local)
     python -m agent.harness --no-llm     keyword routing only (no keys at all)
@@ -28,7 +28,7 @@ TOOLS = {
                    {"goal": {"type": "string"}}),
     "confirm": ("Record the caller's spoken yes for the approval you just read out.", {}),
     "wait_for_approval": ("After asking them to press their approve button, wait until they press it.", {}),
-    "cancel_task": ("Stop whatever Lend is doing.", {}),
+    "cancel_task": ("Stop whatever Warden is doing.", {}),
     "check_accounts": ("Review bank and email for unusual charges, sign-ins and scam emails.", {}),
     "read_paper": ("Look at a letter or screen held up to the camera and say if it's a scam.", {}),
     "send_screenshot": ("Text a large, high-contrast picture of the current page.", {}),
@@ -36,7 +36,7 @@ TOOLS = {
 
 
 def say(text):
-    print(f"\n🔊 Lend: {text}", flush=True)
+    print(f"\n🔊 Warden: {text}", flush=True)
 
 
 async def call(tools: LendTools, name, args):
@@ -133,9 +133,9 @@ async def main():
         model = inference.LLM(model=os.getenv("LEND_VOICE_LLM", "xai/grok-4.3"))
         ctx = llm.ChatContext()
         ctx.add_message(role="system", content=INSTRUCTIONS)
-    print(f"Lend text harness ({'Grok voice brain' if use_llm else 'keyword mode'}). "
+    print(f"Warden text harness ({'Grok voice brain' if use_llm else 'keyword mode'}). "
           f"Type what the caller says. /button presses the approve button. /quit exits.")
-    say("Hi, I'm Lend, your online safety helper. What would you like help with today?")
+    say("Hi, I'm Warden, your online safety helper. What would you like help with today?")
     try:
         while True:
             if scripted:

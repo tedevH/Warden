@@ -1,4 +1,4 @@
-"""Lend voice agent: a LiveKit agent that answers the Chert FaceTime line.
+"""Warden voice agent: a LiveKit agent that answers the Chert FaceTime line.
 
     terminal 1:  make orchestrator        (tasks, safety gate, dashboard)
     terminal 2:  make agent               (this file)
@@ -39,7 +39,7 @@ log = logging.getLogger("lend.agent")
 AGENT_NAME = os.getenv("AGENT_NAME", "lend-agent")
 
 
-class Lend(Agent):
+class Warden(Agent):
     def __init__(self, tools: LendTools):
         super().__init__(instructions=INSTRUCTIONS)
         self.t = tools
@@ -65,7 +65,7 @@ class Lend(Agent):
 
     @function_tool()
     async def cancel_task(self, context: RunContext) -> str:
-        """Stop whatever Lend is doing right now. Use when the caller says stop or cancel."""
+        """Stop whatever Warden is doing right now. Use when the caller says stop or cancel."""
         return await self.t.cancel()
 
     @function_tool()
@@ -80,7 +80,7 @@ class Lend(Agent):
 
     @function_tool()
     async def send_screenshot(self, context: RunContext) -> str:
-        """Text the caller a large, high-contrast picture of the page Lend is on (for low vision)."""
+        """Text the caller a large, high-contrast picture of the page Warden is on (for low vision)."""
         return await self.t.send_screenshot()
 
 
@@ -136,7 +136,7 @@ async def entry(ctx: agents.JobContext):
     session.on("user_state_changed", lambda ev: log.info("CALLER %s", ev.new_state))
 
     def on_agent_state(ev):
-        log.info("LEND %s", ev.new_state)
+        log.info("WARDEN %s", ev.new_state)
         face.state = ev.new_state if ev.new_state in ("listening", "thinking", "speaking") else "listening"
 
     def on_item(ev):
@@ -225,7 +225,7 @@ async def entry(ctx: agents.JobContext):
 
     ctx.add_shutdown_callback(on_end)
     await session.start(
-        room=ctx.room, agent=Lend(tools),
+        room=ctx.room, agent=Warden(tools),
         room_options=room_io.RoomOptions(participant_identity=caller.identity, close_on_disconnect=True),
     )
 

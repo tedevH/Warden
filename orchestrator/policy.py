@@ -84,7 +84,7 @@ def classify(action, allowlist, vault_origins) -> Classification:
         if action.kind == "goto":
             scheme = urlsplit(action.url).scheme.lower()
             if scheme not in ("http", "https"):
-                return _c("blocked", f"Lend only opens web pages, not {scheme}: links.")
+                return _c("blocked", f"Warden only opens web pages, not {scheme}: links.")
             if not on_safe_site:
                 return _c("navigate", f"{page_host} isn't on the safe list: look only, no clicking or typing.",
                           sandbox=True)
@@ -94,19 +94,19 @@ def classify(action, allowlist, vault_origins) -> Classification:
     if not on_safe_site:
         if action.kind == "click" and role == "link" and t.get("href", "").startswith(("http://", "https://")):
             return classify(type(action)("goto", t["href"]), allowlist, vault_origins)
-        return _c("blocked", f"{page_host} isn't on your safe list, so Lend will only look at it, not click or type.",
+        return _c("blocked", f"{page_host} isn't on your safe list, so Warden will only look at it, not click or type.",
                   sandbox=True)
 
     if action.kind == "login":
         if origin_of(action.url) in vault_origins:
             return _c("navigate", "saved login filled on its exact origin", tier=0)
-        return _c("credential", f"No saved login for {origin_of(action.url)}. Lend won't sign in there.")
+        return _c("credential", f"No saved login for {origin_of(action.url)}. Warden won't sign in there.")
 
     if action.kind == "type":
         if role == "password":
-            return _c("credential", "Lend never types passwords.")
+            return _c("credential", "Warden never types passwords.")
         if SENSITIVE_FIELD.search(name) or CARD_DIGITS.search(action.text or ""):
-            return _c("credential", f'Lend never enters codes, card, account or recovery details ("{name}").')
+            return _c("credential", f'Warden never enters codes, card, account or recovery details ("{name}").')
         return _c("draft", "typing a draft; nothing is sent until a button is pressed")
 
     if action.kind == "select":

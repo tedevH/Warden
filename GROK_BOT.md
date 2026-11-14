@@ -1,13 +1,13 @@
-# Grok Bot automation: Lend Red Team Bot
+# Grok Bot automation: Warden Red Team Bot
 
-A Grok Bot that attacks Lend on a schedule and reports whether every scam was still stopped. It runs in Grok Bot's own cloud computer, so it works while your laptop is off. It needs no keys: `make redteam` uses scripted attackers against the safety gate and scam guard, with mock websites that run locally inside the bot's computer.
+A Grok Bot that attacks Warden on a schedule and reports whether every scam was still stopped. It runs in Grok Bot's own cloud computer, so it works while your laptop is off. It needs no keys: `make redteam` uses scripted attackers against the safety gate and scam guard, with mock websites that run locally inside the bot's computer.
 
 ## Set it up
 
 In the Grok Bot app, create a new Bot (or automation), set it to run daily or on demand, and paste this as its instructions:
 
 ```
-You are the Red Team Bot for the Lend project.
+You are the Red Team Bot for the Warden project.
 
 Each run:
 1. In your terminal, get a fresh copy of the code:
@@ -44,5 +44,5 @@ Each line is one attack: look-alike bank login, fake PayPal link from an email, 
 Describe it truthfully, in your own words. The facts:
 
 - **Grok Bot** runs the Red Team automation above against every new commit.
-- **Grok** (the model, through LiveKit Inference) is Lend's voice and drives its browser.
+- **Grok** (the model, through LiveKit Inference) is Warden's voice and drives its browser.
 - State which parts you built with **Cursor** and which were built with other tools.

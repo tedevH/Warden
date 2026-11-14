@@ -1,4 +1,4 @@
-"""Lend orchestrator: task API, safety gate, events, caregiver dashboard, approve-button page.
+"""Warden orchestrator: task API, safety gate, events, caregiver dashboard, approve-button page.
 
     python -m orchestrator            (make orchestrator)   http://127.0.0.1:8200
 
@@ -53,7 +53,7 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
             loop.cancel()
         tm.kill_all()
 
-    app = FastAPI(title="Lend orchestrator", lifespan=lifespan)
+    app = FastAPI(title="Warden orchestrator", lifespan=lifespan)
     app.mount("/screens", StaticFiles(directory=str(SCREENS)), name="screens")
 
     def task_or_404(tid):

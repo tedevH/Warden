@@ -1,9 +1,9 @@
-"""Lend's on-call face: a polished illustrated avatar published as the agent's camera track.
+"""Warden's on-call face: a polished illustrated avatar published as the agent's camera track.
 
 FaceTime Video shows the agent's video once it publishes one (Chert docs), so this is what the caller sees:
   * an illustrated helper who blinks, looks up while thinking, and talks with a moving mouth
   * a status pill (Listening / Working on it / Talking) and a large caption card for hard-of-hearing callers
-  * a badge: "Protected" in green, or "Scam blocked" in red after Lend stops a scam
+  * a badge: "Protected" in green, or "Scam blocked" in red after Warden stops a scam
 
 Rendering: static layers are drawn once at 3x and downscaled (smooth edges). Each frame only redraws the
 eyes, brows and mouth on a small 3x layer, so it stays cheap at 15 fps.
@@ -119,7 +119,7 @@ def _avatar_layer():
 class Face:
     def __init__(self):
         self.state = "listening"        # listening | thinking | speaking
-        self.caption = "Hi, I'm Lend. How can I help?"
+        self.caption = "Hi, I'm Warden. How can I help?"
         self.alert = False              # red badge after a blocked scam
         self.source = rtc.VideoSource(W, H)
         self.track = rtc.LocalVideoTrack.create_video_track("lend-face", self.source)
@@ -216,7 +216,7 @@ class Face:
         ui = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(ui)
         # header
-        d.text((40, 34), "Lend", font=self.f_title, fill=(244, 247, 250))
+        d.text((40, 34), "Warden", font=self.f_title, fill=(244, 247, 250))
         d.text((42, 90), "Your online safety helper", font=self.f_sub, fill=(160, 180, 196))
         label = "Scam blocked" if self.alert else "Protected"
         col = RED if self.alert else GREEN

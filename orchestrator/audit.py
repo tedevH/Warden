@@ -185,7 +185,7 @@ async def run_audit(tm, task, session) -> str:
     money_alert = next((f for f in new_high if f["kind"] in ("test_charges", "new_merchant")), None)
     if money_alert and tm.adapter and not tm.on_call.get(task.user_id):
         phone = tm.store.settings()["profile"].get("phone", "")
-        line = f"Hi, it's Lend. {money_alert['explanation']}"
+        line = f"Hi, it's Warden. {money_alert['explanation']}"
         tm.narrate(task, "Calling to tell them about an unusual charge")
         import asyncio
         asyncio.get_running_loop().run_in_executor(None, tm._safe, tm.adapter.place_outbound_call, phone, line)

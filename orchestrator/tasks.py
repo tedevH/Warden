@@ -1,4 +1,4 @@
-"""Task state machine + safety gate + approvals. The single source of truth for what Lend is doing.
+"""Task state machine + safety gate + approvals. The single source of truth for what Warden is doing.
 
     planning -> running -> awaiting_confirm -> running -> done | failed | cancelled
 
@@ -88,7 +88,7 @@ class TaskManager:
         cg = self.store.settings()["caregiver"]
         if audience == "caregiver" and self.adapter and cg.get("phone"):
             asyncio.get_running_loop().run_in_executor(None, self._safe, self.adapter.send_imessage, cg["phone"],
-                                                       f"Lend alert for {self.store.settings()['profile']['name']}: {text}")
+                                                       f"Warden alert for {self.store.settings()['profile']['name']}: {text}")
 
     @staticmethod
     def _safe(fn, *a):
@@ -254,7 +254,7 @@ class TaskManager:
             if stop:
                 if self.store.add_finding(task.user_id, task.id, "scam_page", "high", f"Scam page blocked: {host}",
                                           v["reasons"], v["plain_explanation"], fkey=f"scam_page:{host}"):
-                    self.notify(task.user_id, f"Lend stopped a scam page: {host}. {v['plain_explanation']}")
+                    self.notify(task.user_id, f"Warden stopped a scam page: {host}. {v['plain_explanation']}")
                 else:
                     self.emit(task, "guard", host)
             return v
@@ -328,7 +328,7 @@ class TaskManager:
         if self.on_call.get(task.user_id):
             return
         phone = self.store.settings()["profile"].get("phone", "")
-        line = f"Hi, it's Lend. {task.summary}"
+        line = f"Hi, it's Warden. {task.summary}"
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, self._safe, self.adapter.place_outbound_call, phone, line)
         loop.run_in_executor(None, self._safe, self.adapter.send_imessage, phone, line)

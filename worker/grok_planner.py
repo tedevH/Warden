@@ -99,7 +99,7 @@ async def _execute(session, result, name, args, max_steps):
     except GuardStop as g:
         result.status, result.summary = "blocked", g.verdict.get("plain_explanation") or str(g)
         session.narrate(f"Stopped for safety: {result.summary}")
-        return f"STOPPED BY LEND GUARD: {result.summary} The task is over. Call done() and say this.", False
+        return f"STOPPED BY WARDEN GUARD: {result.summary} The task is over. Call done() and say this.", False
     except Blocked as e:
         result.blocked.append(str(e))
         session.narrate(f"Blocked: {e}")

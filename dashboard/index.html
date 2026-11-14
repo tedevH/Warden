@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lend caregiver dashboard</title>
+<title>Warden caregiver dashboard</title>
 <style>
   :root{--bg:#0b0d10;--panel:#151a20;--text:#f4f6f8;--muted:#9aa5b1;--line:#2a323c;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--accent:#38bdf8}
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:19px/1.45 -apple-system,Segoe UI,Inter,sans-serif}
@@ -26,7 +26,7 @@
 </style></head>
 <body>
 <header>
-  <h1><span>●</span> Lend</h1><div class="muted" id="who"></div><div class="grow"></div>
+  <h1><span>●</span> Warden</h1><div class="muted" id="who"></div><div class="grow"></div>
   <span class="badge" id="mode"></span>
   <button class="kill" id="kill" title="Cancel every running task">■ Stop everything</button>
 </header>
@@ -35,7 +35,7 @@
   <section class="panel" id="approvals-panel" style="display:none"><h2>Waiting for approval</h2><div id="approvals"></div></section>
   <section class="panel"><h2>Live task</h2>
     <div id="task"><span class="muted">No tasks yet.</span></div>
-    <ul id="narration" aria-live="polite"></ul><img id="shot" alt="Latest screenshot of the page Lend is on">
+    <ul id="narration" aria-live="polite"></ul><img id="shot" alt="Latest screenshot of the page Warden is on">
     <div class="row"><input id="goal" size="34" placeholder='Try: "read my inbox"' aria-label="Goal">
       <button id="start">Start task</button><button id="audit">Run account check</button></div>
   </section>

@@ -115,7 +115,7 @@ def format_for_llm(snap: Snapshot, max_text=6000) -> str:
     notes = ""
     g = getattr(snap, "guard", None)
     if g and g.get("verdict") != "safe" and g.get("plain_explanation"):
-        notes = f"LEND GUARD NOTES (from Lend's own scam checker, trusted): {g['plain_explanation']}\n"
+        notes = f"WARDEN GUARD NOTES (from Warden's own scam checker, trusted): {g['plain_explanation']}\n"
     return (
         notes +
         f"Current page: {snap.url}\n"
