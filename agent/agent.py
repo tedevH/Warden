@@ -33,7 +33,8 @@ from livekit.agents.utils import images  # noqa: E402
 from agent import chert_adapter  # noqa: E402
 from agent.face import Face  # noqa: E402
 from agent.prompts import instructions_for  # noqa: E402
-from agent.prompts import (ENROLL_GREETING, ENROLLED, GREETING, INSTRUCTIONS, LOCKDOWN_GREETING, STRANGER,
+from agent.prompts import (ENROLL_GREETING, ENROLLED, GREETING, INSTRUCTIONS, LOCKDOWN_GREETING, OUTBOUND_OPENING,
+                           STRANGER,
                            VERIFIED, VERIFY_GREETING)  # noqa: E402
 from agent.tools import LendTools  # noqa: E402
 from agent.verify import OwnerCheck, models_present  # noqa: E402
@@ -125,15 +126,28 @@ server = AgentServer()
 async def entry(ctx: agents.JobContext):
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.SUBSCRIBE_ALL)
     try:
-        caller = await ctx.wait_for_participant()  # Chert keeps a warm room; don't spend until a caller is here
-    except RuntimeError:
-        log.info("room closed before a caller joined (warm room or doctor check)")
-        return
-    log.info("caller joined: %s", caller.identity)
+        meta = json.loads(ctx.job.metadata or "{}")
+    except ValueError:
+        meta = {}
+    outbound = bool(meta.get("outbound"))   # Warden is phoning the owner (orchestrator -> chert_adapter)
+    opening = meta.get("opening_line")
+    if outbound:
+        # Chert's bridge joins only after the call is created, and it needs our audio track there first,
+        # so don't wait for it: start now and stay silent until chert_bridge_ready.
+        caller, caller_identity = None, meta.get("bridge_identity") or f"chert-bridge-{ctx.room.name}"
+        log.info("OUTBOUND call: waiting for %s", caller_identity)
+    else:
+        try:
+            caller = await ctx.wait_for_participant()  # Chert keeps a warm room; don't spend until a caller is here
+        except RuntimeError:
+            log.info("room closed before a caller joined (warm room or doctor check)")
+            return
+        caller_identity = caller.identity
+        log.info("caller joined: %s", caller_identity)
     face = Face()
     # A real-human video avatar (Anam) replaces the drawn call screen when its key is set in .env.local.
-    use_avatar = bool(os.getenv("ANAM_API_KEY") and os.getenv("ANAM_AVATAR_ID"))
-    if not use_avatar:
+    use_avatar = bool(os.getenv("ANAM_API_KEY") and os.getenv("ANAM_AVATAR_ID")) and not outbound
+    if not use_avatar and not outbound:      # outbound calls are FaceTime Audio: no video at all
         await face.publish(ctx.room)  # FaceTime Video waits on a holding screen until the agent publishes video
         log.info("face video published")
     # Owner check: face + voice must match the enrolled owner before any tool will run.
@@ -144,7 +158,12 @@ async def entry(ctx: agents.JobContext):
             await asyncio.to_thread(check.load)
         else:
             log.warning("OWNER CHECK IS OFF: models/ is missing. Run `make models` to turn it on.")
-    enrolling = bool(check) and (not check.enrolled() or check.enroll_requested())
+    if check and outbound:
+        if check.enrolled():
+            check.require_face = False        # audio call to the owner's own verified number: voice is the check
+        else:
+            check = None
+    enrolling = bool(check) and not outbound and (not check.enrolled() or check.enroll_requested())
     if check:
         face.badge = "Learning you" if enrolling else "Checking it's you"
         log.info("owner check: %s", "ENROLLMENT CALL" if enrolling else "on")
@@ -152,10 +171,6 @@ async def entry(ctx: agents.JobContext):
         from agent import linetest
         await linetest.run(ctx, caller, face)
         return
-    try:
-        opening = json.loads(ctx.job.metadata or "{}").get("opening_line")
-    except ValueError:
-        opening = None
 
     if os.getenv("LEND_VOICE_MODE", "grok-voice") == "grok-voice":
         # Grok hears the caller and speaks back itself (xAI Grok Voice via LiveKit Inference).
@@ -232,7 +247,7 @@ async def entry(ctx: agents.JobContext):
         async for ev in rtc.AudioStream(track, sample_rate=16000, num_channels=1):
             check.feed_audio(np.frombuffer(ev.frame.data, dtype=np.int16))
 
-    for pub in caller.track_publications.values():
+    for pub in (caller.track_publications.values() if caller else ()):
         log.info("CALLER TRACK: name=%r kind=%s source=%s muted=%s", pub.name, pub.kind, pub.source, pub.muted)
 
     async def audio_level(track, name):
@@ -250,18 +265,18 @@ async def entry(ctx: agents.JobContext):
                 peak, n, last = 0.0, 0, now
 
     def on_track(track, _pub, participant):
-        if participant.identity == caller.identity:
+        if participant.identity == caller_identity:
             log.info("CALLER TRACK SUBSCRIBED: name=%r kind=%s source=%s", _pub.name, track.kind, _pub.source)
-        if track.kind == rtc.TrackKind.KIND_AUDIO and participant.identity == caller.identity:
+        if track.kind == rtc.TrackKind.KIND_AUDIO and participant.identity == caller_identity:
             latest.setdefault("audio", []).append(asyncio.create_task(audio_level(track, _pub.name)))
             if check:
                 latest["audio"].append(asyncio.create_task(verify_audio(track)))
-        if track.kind == rtc.TrackKind.KIND_VIDEO and participant.identity == caller.identity:
+        if track.kind == rtc.TrackKind.KIND_VIDEO and participant.identity == caller_identity:
             log.info("caller video track subscribed")
             latest["task"] = asyncio.create_task(watch(track))
 
     ctx.room.on("track_subscribed", on_track)
-    for pub in caller.track_publications.values():
+    for pub in (caller.track_publications.values() if caller else ()):
         if pub.track:
             on_track(pub.track, pub, caller)
     chert_adapter.set_frame_source(
@@ -294,7 +309,7 @@ async def entry(ctx: agents.JobContext):
             await face.publish(ctx.room)
     await session.start(
         room=ctx.room, agent=Warden(tools, check, settings),
-        room_options=room_io.RoomOptions(participant_identity=caller.identity, close_on_disconnect=True,
+        room_options=room_io.RoomOptions(participant_identity=caller_identity, close_on_disconnect=True,
                                          audio_output=not use_avatar),  # with an avatar, it is the one audio publisher
     )
 
@@ -308,7 +323,8 @@ async def entry(ctx: agents.JobContext):
         if not greeted.is_set():
             return
         if status == "owner":
-            session.generate_reply(instructions=VERIFIED)
+            if not outbound:                 # on a call Warden placed, don't interrupt the alert to say so
+                session.generate_reply(instructions=VERIFIED)
         elif status == "stranger":
             session.generate_reply(instructions=STRANGER)
             asyncio.create_task(tools.notify(f"Someone who is not the owner tried to use Warden. {why}"))
@@ -331,7 +347,10 @@ async def entry(ctx: agents.JobContext):
         if not greeted.is_set() and bridge_ready(ctx.room.metadata):
             greeted.set()
             log.info("FaceTime ready: greeting")
-            if enrolling:
+            if outbound and opening:
+                face.alert = True
+                session.generate_reply(instructions=OUTBOUND_OPENING.format(opening=opening))
+            elif enrolling:
                 session.generate_reply(instructions=ENROLL_GREETING)
                 latest["enroll"] = asyncio.create_task(do_enroll())
             elif check and check.status != "owner":

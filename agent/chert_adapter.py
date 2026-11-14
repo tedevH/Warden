@@ -37,7 +37,8 @@ _frame_source = None   # set by the live agent: () -> bytes | None
 
 
 def mode():
-    return os.getenv("CHERT_MODE", "mock").strip().lower()
+    # live as soon as a project API key is present; otherwise calls and messages are only printed
+    return os.getenv("CHERT_MODE", "live" if os.getenv("CHERT_API_KEY") else "mock").strip().lower()
 
 
 def _mock(kind, **fields):
@@ -109,50 +110,72 @@ def show_on_call(image_path, to=None):
 
 
 def place_outbound_call(to, opening_line):
-    """FaceTime `to` from the Chert line; our agent speaks `opening_line` once Chert reports bridge_ready."""
+    """FaceTime Audio `to` from the Chert line; our agent speaks `opening_line` once Chert reports bridge_ready.
+
+    Follows docs.trychert.com/facetime/outbound: put the agent in a fresh room with its audio track published,
+    mint a bridge token for that room, POST /calls, then watch the call's events for bridge_ready.
+    Needs CHERT_API_KEY (facetime:write + facetime:read), CHERT_PROJECT_ID, and a phone number verified on the
+    project. First proven on a real line: see README "What is verified".
+    """
     if mode() == "mock" or not to:
         return _mock("place_outbound_call", to=to, opening_line=opening_line)
-    # TODO(chert) 3: written from docs.trychert.com/facetime/outbound, not yet verified on a real line.
     import asyncio
+    import datetime
     from livekit import api
     url, key, secret = (os.environ[k] for k in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"))
     agent_name = os.getenv("AGENT_NAME", "lend-agent")
     room = f"lend-callback-{uuid.uuid4().hex[:10]}"
+    bridge_identity = f"chert-bridge-{room}"
 
-    async def dispatch():
+    async def prepare():
+        """Dispatch the agent and wait until it has joined the room. Returns its identity.
+
+        The agent publishes its audio the moment the bridge joins, exactly as it does on inbound calls.
+        """
         lk = api.LiveKitAPI(url, key, secret)
         try:
+            await lk.room.create_room(api.CreateRoomRequest(name=room, empty_timeout=120))
             await lk.agent_dispatch.create_dispatch(api.CreateAgentDispatchRequest(
-                agent_name=agent_name, room=room,
-                metadata=json.dumps({"outbound": True, "opening_line": opening_line})))
+                agent_name=agent_name, room=room, metadata=json.dumps(
+                    {"outbound": True, "opening_line": opening_line, "bridge_identity": bridge_identity})))
+            for _ in range(60):
+                await asyncio.sleep(0.5)
+                people = (await lk.room.list_participants(api.ListParticipantsRequest(room=room))).participants
+                if people:
+                    return people[0].identity
+            return None
         finally:
             await lk.aclose()
 
-    asyncio.run(dispatch())
-    bridge = (api.AccessToken(key, secret).with_identity(f"chert-bridge-{room}")
+    async def set_ready(call_id):
+        lk = api.LiveKitAPI(url, key, secret)
+        try:
+            await lk.room.update_room_metadata(api.UpdateRoomMetadataRequest(
+                room=room, metadata=json.dumps({"chert_call": call_id, "chert_bridge_ready": True})))
+        finally:
+            await lk.aclose()
+
+    agent_identity = asyncio.run(prepare())
+    if not agent_identity:
+        raise RuntimeError("the agent did not join the callback room; is `make agent` running?")
+    bridge = (api.AccessToken(key, secret).with_identity(bridge_identity)
               .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
-              .with_ttl(__import__("datetime").timedelta(minutes=30)).to_jwt())
+              .with_ttl(datetime.timedelta(minutes=30)).to_jwt())
     res = _request("POST", "/calls", {
         "direction": "outbound", "mode": "customer_managed", "line_id": _line_id(),
         "destination": to, "destination_type": "phone", "media": {"audio": True, "video": False},
-        "livekit_url": url, "participant_token": bridge, "remote_participant_identity": agent_name})
+        "livekit_url": url, "participant_token": bridge, "remote_participant_identity": agent_identity})
     call_id = (res.get("data") or res).get("id")
-    # Tell the agent when FaceTime is really connected: poll events and set the room metadata it listens for.
-    deadline = time.time() + 90
+    log.info("outbound call %s allocated to %s (agent %s)", call_id, to[:5] + "…", agent_identity)
+    deadline = time.time() + 90   # ringing: speak only once Chert says the call is really connected
     while call_id and time.time() < deadline:
-        ev = _request("GET", f"/calls/{call_id}/events")
-        blob = json.dumps(ev)
+        blob = json.dumps(_request("GET", f"/calls/{call_id}/events"))
         if "bridge_ready" in blob:
-            async def ready():
-                lk = api.LiveKitAPI(url, key, secret)
-                try:
-                    await lk.room.update_room_metadata(api.UpdateRoomMetadataRequest(
-                        room=room, metadata=json.dumps({"chert_call": call_id, "chert_bridge_ready": True})))
-                finally:
-                    await lk.aclose()
-            asyncio.run(ready())
+            asyncio.run(set_ready(call_id))
+            log.info("outbound call %s answered", call_id)
             break
         if any(s in blob for s in ('"failed"', '"ended"', '"declined"', '"no_answer"')):
+            log.info("outbound call %s was not answered", call_id)
             break
         time.sleep(2)
     return res

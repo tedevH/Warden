@@ -28,15 +28,29 @@ from livekit.agents.utils import http_context  # noqa: E402
 
 URL, KEY, SECRET = (os.environ[k] for k in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"))
 AGENT = os.getenv("AGENT_NAME", "lend-agent")
-LINE = sys.argv[1] if len(sys.argv) > 1 else "Check my email please."
+OUTBOUND = "--outbound" in sys.argv   # simulate a call Warden places: agent first, bridge joins afterwards
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+LINE = ARGS[0] if ARGS else ("No, I did not make that charge. Please freeze my card right away." if OUTBOUND
+                             else "Check my email please.")
+OPENING = "Hi, it's Warden. I'm calling because I noticed something. A four hundred dollar charge looks unusual. Did you make it?"
 
 
 async def main():
     room_name = f"lend-selftest-{uuid.uuid4().hex[:8]}"
     lk = api.LiveKitAPI(URL, KEY, SECRET)
     await lk.room.create_room(api.CreateRoomRequest(name=room_name, empty_timeout=60))
-    await lk.agent_dispatch.create_dispatch(api.CreateAgentDispatchRequest(agent_name=AGENT, room=room_name))
-    token = (api.AccessToken(KEY, SECRET).with_identity("chert-bridge-selftest")
+    me = f"chert-bridge-{room_name}" if OUTBOUND else "chert-bridge-selftest"
+    meta = json.dumps({"outbound": True, "opening_line": OPENING, "bridge_identity": me}) if OUTBOUND else ""
+    await lk.agent_dispatch.create_dispatch(api.CreateAgentDispatchRequest(agent_name=AGENT, room=room_name, metadata=meta))
+    if OUTBOUND:   # like chert_adapter: the agent must be in the room before the bridge joins
+        for _ in range(60):
+            await asyncio.sleep(0.5)
+            if (await lk.room.list_participants(api.ListParticipantsRequest(room=room_name))).participants:
+                print("  agent joined the room on its own, before the bridge")
+                break
+        else:
+            print("  FAIL: the agent never joined")
+    token = (api.AccessToken(KEY, SECRET).with_identity(me)
              .with_grants(api.VideoGrants(room_join=True, room=room_name, can_publish=True, can_subscribe=True))
              .to_jwt())
     room = rtc.Room()
@@ -78,7 +92,7 @@ async def main():
             await mic.capture_frame(silence)
 
     agent_seen = time.time() + 30
-    while time.time() < agent_seen and not any(p.identity != "chert-bridge-selftest"
+    while time.time() < agent_seen and not any(p.identity != me
                                                 for p in room.remote_participants.values()):
         await feed_silence(0.2)
     agents = [p.identity for p in room.remote_participants.values()]

@@ -46,4 +46,5 @@ part, and the rules that protect your money are in code that neither a scammer n
 - It runs on mock bank, mail and shop sites. Real accounts are the next step, read-only first.
 - The owner check matches identity, not liveness: a good photo or a voice recording could fool it. It is one
   layer on top of the approval rules, not a replacement for them.
-- Warden calling you first (instead of you calling it) is written but has not been proven on a live line.
+- Warden calling you first when it spots something works end to end in simulation (detection, the call request,
+  the conversation), but has not yet been placed on a live Chert line.

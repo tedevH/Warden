@@ -47,6 +47,7 @@ class OwnerCheck:
         self.on_change = on_change or (lambda status, why: None)
         self.status, self.why = "checking", "Waiting to see and hear the caller."
         self.face_ref = self.voice_ref = None
+        self.require_face = True     # False on audio-only calls Warden places to the owner's own number
         self._frame = None
         self._speech: list[np.ndarray] = []
         self._speech_n = 0
@@ -201,14 +202,14 @@ class OwnerCheck:
             self._voice_ok = score >= VOICE_MIN
             log.info("VOICE score %.2f (need %.2f)", score, VOICE_MIN)
 
-        face_ok = now - self._face_ok_at < FACE_FRESH_S
+        face_ok = not self.require_face or now - self._face_ok_at < FACE_FRESH_S
         if self._face_miss >= 2:
             self._set("stranger", "The face on camera is not the owner's.")
         elif self._voice_ok is False:
             self._set("stranger", "The voice is not the owner's.")
         elif face_ok and self._voice_ok:
             self._set("owner", "Face and voice both match the owner.")
-        elif self._frame is None:
+        elif self._frame is None and self.require_face:
             self._set("checking", "No camera. Call on FaceTime Video so I can see it's you.")
         elif not face_ok:
             self._set("checking", "I can't see the owner's face. Look at the camera.")

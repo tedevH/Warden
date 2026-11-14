@@ -77,6 +77,11 @@ ENROLL_GREETING = ("Say: Hi, I'm Warden. I'm going to learn your face and your v
 ENROLLED = ("Enrollment worked. Tell them in one or two short sentences that they are now set up as your owner, that "
             "only their face and voice together unlock you, and ask what they'd like help with.")
 
+OUTBOUND_OPENING = ("You are phoning your owner because you noticed something on their accounts; they did not call "
+                    "you. They have just picked up. Say exactly this, then stop and wait for their answer: {opening} "
+                    "If they say they did not make it, offer to freeze their card. If their reply was very short, "
+                    "ask them to tell you a little more so you can be sure it's them.")
+
 
 def instructions_for(settings: dict) -> str:
     """The standing instructions plus the few facts Warden knows about this person."""

@@ -101,6 +101,10 @@ Optional extras if there's time:
 - **Tamper-proof log (Solana).** On the dashboard's action log, click a "⛓ on Solana" link to show the entry's
   transaction, then **Verify log** (green). Click **Tamper (demo)**, which secretly edits a log entry, then
   **Verify log** again: "TAMPERING DETECTED: log entry #N was changed after it was recorded."
+- **Warden calls you.** With `AUDIT_INTERVAL_S=45` and a Chert API key in `.env`, hang up, click **Inject fraud** on
+  the mock admin page, and wait: within about a minute your phone rings. "Hi, it's Warden. I'm calling because I
+  noticed something. I found a four hundred dollar charge at a store you haven't used before. Did you make it?"
+  Say *"No, freeze my card"*, then yes and the button. Without a key, the call is printed in `data/chert_mock.log`.
 - **Spending limit.** On the dashboard set the limit to $20 and retry the pizza: blocked.
 
 ## If something goes wrong
