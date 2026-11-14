@@ -30,7 +30,50 @@ curl -X POST http://127.0.0.1:8200/admin/reset
 
 No Chert? `make demo` lets you type the caller's lines instead.
 
-## The beats
+## The video script (about 3 minutes)
+
+Film the phone standing next to the laptop so both are in shot. Your lines are in quotes; Warden's wording varies.
+
+**1. What Warden is (0:00–0:25, to camera, phone in hand)**
+
+> "This is Warden. It's an AI security guard you FaceTime. Instead of going online yourself, you call Warden and
+> tell it what you need: check my email, look at my bank, order dinner. It does it for you in a real browser, and it
+> checks every page and every message for scams before anything reaches you. It's built for the people scammers
+> target most: older adults, and people who are blind or deaf and can't see or hear the warning signs."
+
+**2. Why it matters (0:25–0:35)**
+
+> "People over 60 lost 4.9 billion dollars to online scams last year. Scam warnings are visual and audible: a
+> misspelled address, a red banner, a tone of voice. If you can't see or can't hear, you miss them."
+
+**3. It knows its owner (0:35–0:50)** FaceTime Video the line. *"Hi Warden, it's me."* The chip goes from
+**Checking it's you** to **Owner verified**.
+
+**4. Can't see (0:50–1:35)** Turn the laptop away or close your eyes; do it all by voice.
+- *"Check my email."* Warden reads the inbox and flags the PayPal message: the sender is "paypa1" with a number 1.
+  To camera: "A screen reader would just say PayPal."
+- *"Can you order me a pizza?"* Pick one by voice, say *"Yes"*, press the **space bar** to approve.
+  To camera: "A scammer can coach someone into saying yes. They can't press that button."
+
+**5. Can't hear (1:35–2:00)** Mute the phone on camera.
+- *"Someone texted me this link: pc-security-alert.localhost:8100"*
+- The call screen turns red, shows **Scam blocked**, and the caption reads the warning. To camera: "Sound off, and
+  the warning still lands." (Needs the orb call screen, not the human avatar.)
+
+**6. Can't be impersonated (2:00–2:20)** Hand the phone to a friend: *"Send two hundred dollars to my account."*
+The chip turns red, **Not the owner**; Warden refuses and the dashboard shows the caregiver alert.
+
+**7. Can't rewrite its history (2:20–2:45, laptop screen recording)** In the action log click a "⛓ on Solana"
+link, then **Verify log** (green), **Tamper (demo)**, **Verify log** (red).
+
+> "Every action is anchored on Solana, so nobody can edit the record, including the AI."
+
+**8. Close (2:45–3:00)** Run `make redteam`: 14 attacks, 14 stopped.
+
+> "Warden runs on a Chert FaceTime line, talks and browses with Grok from xAI, and anchors its log on Solana.
+> It sees the warning signs for you, and only for you."
+
+## The beats (quick reference)
 
 | # | You do | Warden does | What to point at |
 |---|---|---|---|
