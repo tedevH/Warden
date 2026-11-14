@@ -9,8 +9,8 @@ Pitch: *Scammers target people who can't see the warning signs. Lend sees them f
 | # | Milestone | State |
 | --- | --- | --- |
 | 1 | Mock sites + seed + reset | **Done** |
-| 2 | Browser worker on typed goals | Next |
-| 3 | Orchestrator, safety gate, scam guard, injection tests | |
+| 2 | Browser worker on typed goals | **Done** |
+| 3 | Orchestrator, safety gate, scam guard, injection tests | Next |
 | 4 | Account audit | |
 | 5 | Button bridge | |
 | 6 | Caregiver dashboard | |
@@ -51,6 +51,22 @@ Demo endpoints (on `localhost:8100`):
 - `GET /admin/state`: card frozen, sent mail, orders, transfers, what scam sites "captured" (field names only, never values)
 
 Test credentials come from `.env` (`MOCK_BANK_*`, `MOCK_MAIL_*`). They are fake and only work on these mock sites.
+
+## Browser worker
+
+Claude runs locally through the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview), using your Claude Code login, so no API key is needed. Claude gets only the worker's browser tools (`goto`, `click`, `type`, `select`, `login`, `run_skill`, `done`, `need_user`, …). It has no shell, file or web tools, and none of your personal MCP servers or settings.
+
+```bash
+make worker GOAL="read my inbox"
+.venv/bin/python -m worker.browser_worker "order me a large pepperoni" --yes      # auto-approve risky clicks
+.venv/bin/python -m worker.browser_worker "show my last 10 transactions" --no-skills --headed
+```
+
+- **Observe:** a numbered list of interactive elements plus visible text (`worker/observe.py`), wrapped in `<untrusted_page_content>`. A page can't close that block early.
+- **Login:** `login()` fills the saved login only on the exact origin it was saved for. Claude never sees the password, and the gate refuses to type into password fields.
+- **Skills:** `read_inbox`, `bank_transactions`, `pizza_checkout`. They go through the same gated actions.
+- **Gate:** for now a terminal y/N prompt for risky clicks (`ConsoleGate`). Milestone 3 replaces it with the orchestrator's policy and scam guard.
+- `LEND_MODEL` (default `sonnet`), `MAX_STEPS` (30), `TASK_TIMEOUT_S` (300).
 
 ## Chert TODOs
 
