@@ -343,6 +343,8 @@ class TaskManager:
                         if planner is None:
                             from worker.browser_worker import run_task as planner
                         link = re.search(r"(?:https?://)?[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}(?::\d+)?(?:/[^\s\"'<>]*)?", task.goal, re.I)
+                        if re.search(r"\b(e-?mail|inbox|message)\b", task.goal, re.I):
+                            link = None  # a link inside an email: the worker opens that email and follows its real link
                         r = None
                         if link:  # always look at a link the person asked about; the guard decides, not the model
                             from worker.browser_worker import TaskResult

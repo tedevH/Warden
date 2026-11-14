@@ -32,6 +32,7 @@ from livekit.agents.utils import images  # noqa: E402
 
 from agent import chert_adapter  # noqa: E402
 from agent.face import Face  # noqa: E402
+from agent.prompts import instructions_for  # noqa: E402
 from agent.prompts import (ENROLL_GREETING, ENROLLED, GREETING, INSTRUCTIONS, LOCKDOWN_GREETING, STRANGER,
                            VERIFIED, VERIFY_GREETING)  # noqa: E402
 from agent.tools import LendTools  # noqa: E402
@@ -42,8 +43,8 @@ AGENT_NAME = os.getenv("AGENT_NAME", "lend-agent")
 
 
 class Warden(Agent):
-    def __init__(self, tools: LendTools, check: OwnerCheck | None = None):
-        super().__init__(instructions=INSTRUCTIONS)
+    def __init__(self, tools: LendTools, check: OwnerCheck | None = None, settings: dict | None = None):
+        super().__init__(instructions=instructions_for(settings or {}))
         self.t = tools
         self.check = check
 
@@ -198,9 +199,10 @@ async def entry(ctx: agents.JobContext):
     # Grok Voice speaks for itself; only the classic pipeline can inject exact lines mid-task.
     tools = LendTools(say=(lambda text: None) if realtime else (lambda text: session.say(text, allow_interruptions=True)))
     try:
-        profile = (await tools.settings())["profile"]
+        settings = await tools.settings()
+        profile = settings["profile"]
     except Exception:
-        profile = {}
+        settings, profile = {}, {}
         log.warning("orchestrator not reachable at %s: start it with `make orchestrator`", tools.base)
     deaf = "deaf" in profile.get("accessibility", []) and profile.get("phone")
 
@@ -212,6 +214,9 @@ async def entry(ctx: agents.JobContext):
             return asyncio.to_thread(chert_adapter.send_imessage, profile["phone"], line)
 
     tools.on_narration = on_narration
+    tools.on_result = lambda text: session.generate_reply(
+        instructions=f"The caller pressed their approve button (or time ran out). Tell them the result now, "
+                     f"in one or two short sentences: {text}")
 
     # Caller camera (FaceTime Video + caller capture enabled on the line): keep the newest frame for read_paper.
     latest: dict = {}
@@ -288,7 +293,7 @@ async def entry(ctx: agents.JobContext):
             use_avatar = False
             await face.publish(ctx.room)
     await session.start(
-        room=ctx.room, agent=Warden(tools, check),
+        room=ctx.room, agent=Warden(tools, check, settings),
         room_options=room_io.RoomOptions(participant_identity=caller.identity, close_on_disconnect=True,
                                          audio_output=not use_avatar),  # with an avatar, it is the one audio publisher
     )

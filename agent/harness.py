@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 load_dotenv(ROOT / ".env.local", override=True)
 
-from agent.prompts import INSTRUCTIONS  # noqa: E402
+from agent.prompts import instructions_for  # noqa: E402
 from agent.tools import LendTools  # noqa: E402
 
 TOOLS = {
@@ -114,9 +114,15 @@ async def main():
         if "approve button" in text.lower():
             asyncio.create_task(press())
 
-    tools = LendTools(say=say_and_maybe_press, on_narration=lambda line: print(f"   · {line}", flush=True))
+    def narrate(line):
+        print(f"   · {line}", flush=True)
+        if "press your approve button" in line.lower():
+            asyncio.create_task(press())
+
+    tools = LendTools(say=say_and_maybe_press, on_narration=narrate)
+    tools.on_result = lambda text: print(f"\n   [result told to Warden] {text}", flush=True)
     try:
-        await tools.settings()
+        settings = await tools.settings()
     except Exception:
         sys.exit(f"The orchestrator isn't running at {tools.base}. Start it with: make orchestrator")
     await tools.presence(True)
@@ -132,10 +138,10 @@ async def main():
             "type": "object", "properties": p, "required": list(p)}}) for n, (d, p) in TOOLS.items()]
         model = inference.LLM(model=os.getenv("LEND_VOICE_LLM", "xai/grok-4.3"))
         ctx = llm.ChatContext()
-        ctx.add_message(role="system", content=INSTRUCTIONS)
+        ctx.add_message(role="system", content=instructions_for(settings))
     print(f"Warden text harness ({'Grok voice brain' if use_llm else 'keyword mode'}). "
           f"Type what the caller says. /button presses the approve button. /quit exits.")
-    say("Hi, I'm Warden, your online safety helper. What would you like help with today?")
+    say("Hi, I'm Warden, your security guardian. What would you like help with today?")
     try:
         while True:
             if scripted:
@@ -162,6 +168,11 @@ async def main():
     except (EOFError, KeyboardInterrupt):
         pass
     finally:
+        if tools._bg and not tools._bg.done():
+            try:
+                await tools._bg
+            except asyncio.CancelledError:
+                pass
         await tools.presence(False)
         if model:
             await model.aclose()

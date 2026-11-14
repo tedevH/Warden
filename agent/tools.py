@@ -33,6 +33,8 @@ class LendTools:
         self.user_id, self.base = user_id, base
         self.say = say or (lambda text: None)            # speak a short line right now
         self.on_narration = on_narration or (lambda text: None)
+        self.on_result = lambda text: None               # a result arrived while nobody was waiting on a tool
+        self._bg: asyncio.Task | None = None
         self.task_id: str | None = None
         self._seen = 0
         self.http = httpx.AsyncClient(base_url=base, timeout=15)
@@ -71,7 +73,8 @@ class LendTools:
         while time.time() < end:
             t = (await self.http.get(f"/tasks/{self.task_id}")).json()
             for line in t["narration"][self._seen:]:
-                await self._emit(self.on_narration, line)
+                if "Is that okay? Say yes." not in line:   # small undoable steps are approved by the request itself
+                    await self._emit(self.on_narration, line)
             self._seen = len(t["narration"])
             if t["state"] in TERMINAL:
                 return t
@@ -130,13 +133,21 @@ class LendTools:
         self._approving = p and p["expires"]
         if "button" in r.get("still_needed", []):
             await self._emit(self.on_narration, "Now press your approve button.")
+            self._bg = asyncio.create_task(self._tell_when_done())
             return ("Got their yes. Now tell them: please press your approve button. "
-                    "Then call wait_for_approval.")
+                    "You'll be told what happened as soon as they press it.")
         return self._describe(await self._wait(timeout=75, past_pending=self._approving))
+
+    async def _tell_when_done(self):
+        """The button is pressed outside the conversation, so report the outcome without being asked."""
+        t = await self._wait(timeout=75, past_pending=getattr(self, "_approving", None))
+        await self._emit(self.on_result, self._describe(t))
 
     async def wait_for_approval(self) -> str:
         if not self.task_id:
             return "Nothing is waiting."
+        if self._bg and not self._bg.done():
+            self._bg.cancel()
         return self._describe(await self._wait(timeout=75, past_pending=getattr(self, "_approving", None)))
 
     async def cancel(self) -> str:

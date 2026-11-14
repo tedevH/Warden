@@ -17,6 +17,7 @@ DEFAULT_SETTINGS = {
     "profile": {"name": "Margaret", "accessibility": ["low_vision"], "phone": os.getenv("USER_PHONE", "")},
     "caregiver": {"name": "Daniel", "phone": os.getenv("CAREGIVER_PHONE", "")},
     "confirm_window_s": 60,
+    "usual_order": "Large Pepperoni Pizza",   # what "my usual" means at Slice Street Pizza
 }
 
 SCHEMA = """
