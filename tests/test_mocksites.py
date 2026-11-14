@@ -10,11 +10,6 @@ def client(site):
     return TestClient(app, base_url=f"http://{HOSTS[site]}:{PORT}")
 
 
-@pytest.fixture(autouse=True)
-def fresh():
-    reset_all()
-
-
 def login(c, site):
     user, pw = creds(site)
     r = c.post("/login", data={"username": user, "password": pw})

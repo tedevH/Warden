@@ -1,19 +1,49 @@
 PY ?= .venv/bin/python
 MOCK_PORT ?= 8100
+CHERT ?= npx --yes @trychert/facetime@0.1.0-beta.20
 
-.PHONY: setup mocks test worker
+.PHONY: setup vault mocks orchestrator worker agent chert harness button demo redteam test
 
-setup:   ## create .venv and install deps
+setup:        ## create .venv, install deps and Chromium, create .env and the login vault
 	uv venv --python 3.12 .venv
 	uv pip install --python $(PY) -r requirements.txt
 	$(PY) -m playwright install chromium
 	@test -f .env || cp .env.example .env
+	@$(MAKE) --no-print-directory vault
 
-mocks:   ## all mock sites on :$(MOCK_PORT) (admin at http://localhost:$(MOCK_PORT))
+vault:        ## create LEND_VAULT_KEY in .env (if missing) and store the mock-site test logins, encrypted
+	@$(PY) -m orchestrator.vault init
+
+mocks:        ## mock bank, mail, pizza and scam sites on :$(MOCK_PORT) (admin: http://localhost:$(MOCK_PORT))
 	MOCK_PORT=$(MOCK_PORT) $(PY) -m mocksites
 
-test:    ## run the test suite
-	$(PY) -m pytest -q
+orchestrator: ## task API, safety gate, dashboard on http://127.0.0.1:8200
+	$(PY) -m orchestrator
 
-worker:  ## run one typed goal: make worker GOAL="read my inbox"
+worker:       ## one typed goal without the orchestrator: make worker GOAL="read my inbox"
 	$(PY) -m worker.browser_worker "$(GOAL)"
+
+agent:        ## voice agent for the Chert line (needs LIVEKIT_* in .env.local and the orchestrator)
+	$(PY) agent/agent.py dev
+
+chert:        ## connect the Chert FaceTime line to the agent
+	$(CHERT) dev
+
+harness:      ## talk to Lend by typing (no Chert): same tools as the call
+	$(PY) -m agent.harness
+
+button:       ## open the approve-button page
+	open http://127.0.0.1:8200/button
+
+demo:         ## everything except Chert: mock sites + orchestrator + dashboard + button page + text harness
+	@trap 'kill 0' INT TERM EXIT; \
+	MOCK_PORT=$(MOCK_PORT) $(PY) -m mocksites & \
+	CHERT_MODE=mock $(PY) -m orchestrator & \
+	sleep 3; (open http://localhost:$(MOCK_PORT) http://127.0.0.1:8200/button http://127.0.0.1:8200 2>/dev/null || true); \
+	$(PY) -m agent.harness
+
+redteam:      ## attack Lend with every scam and print a scorecard (no keys, no AI)
+	$(PY) -m orchestrator.redteam
+
+test:         ## run the test suite
+	$(PY) -m pytest -q -p no:warnings

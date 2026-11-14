@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lend caregiver dashboard</title>
+<style>
+  :root{--bg:#0b0d10;--panel:#151a20;--text:#f4f6f8;--muted:#9aa5b1;--line:#2a323c;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--accent:#38bdf8}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:19px/1.45 -apple-system,Segoe UI,Inter,sans-serif}
+  header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:16px 28px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:34px} h1 span{color:var(--accent)} .grow{flex:1}
+  h2{margin:0 0 10px;font-size:17px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  main{display:grid;grid-template-columns:1.25fr 1fr;gap:20px;padding:20px 28px} @media(max-width:1000px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:20px}
+  button,input,select{font:inherit} button{padding:8px 16px;border-radius:9px;border:1px solid var(--line);background:#1f2630;color:var(--text);cursor:pointer;font-weight:600}
+  button.go{background:var(--ok);color:#04130a;border:0} button.no{background:var(--bad);color:#fff;border:0} button.kill{background:var(--bad);color:#fff;border:0;font-size:20px}
+  input,select{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0b0f14;color:var(--text)}
+  .badge{display:inline-block;font-size:14px;font-weight:800;text-transform:uppercase;padding:2px 9px;border-radius:6px;background:var(--line)}
+  .high,.blocked,.stopped,.denied,.failed{background:var(--bad);color:#fff} .medium,.awaiting_confirm,.flagged{background:var(--warn);color:#1c1102}
+  .low,.cancelled{background:#3b4551} .done,.allowed,.approved{background:var(--ok);color:#04130a} .running,.planning{background:var(--accent);color:#03161f}
+  .approval{border:3px solid var(--warn);border-radius:12px;padding:14px;margin-bottom:12px;font-size:22px}
+  .approval .btns{margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap} .approval small{color:var(--muted);font-size:16px}
+  ul{list-style:none;margin:0;padding:0} li{border-top:1px solid var(--line);padding:9px 0} li:first-child{border-top:0}
+  .muted{color:var(--muted);font-size:16px} .goal{font-size:24px;font-weight:700}
+  #shot{width:100%;border-radius:10px;border:1px solid var(--line);margin-top:12px;display:none}
+  #narration{max-height:210px;overflow:auto;margin-top:8px} #actions{max-height:420px;overflow:auto;font-size:16px}
+  #findings{max-height:460px;overflow:auto} .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  code{color:#cbd5e1;font-size:15px;word-break:break-all}
+</style></head>
+<body>
+<header>
+  <h1><span>●</span> Lend</h1><div class="muted" id="who"></div><div class="grow"></div>
+  <span class="badge" id="mode"></span>
+  <button class="kill" id="kill" title="Cancel every running task">■ Stop everything</button>
+</header>
+<main>
+<div>
+  <section class="panel" id="approvals-panel" style="display:none"><h2>Waiting for approval</h2><div id="approvals"></div></section>
+  <section class="panel"><h2>Live task</h2>
+    <div id="task"><span class="muted">No tasks yet.</span></div>
+    <ul id="narration" aria-live="polite"></ul><img id="shot" alt="Latest screenshot of the page Lend is on">
+    <div class="row"><input id="goal" size="34" placeholder='Try: "read my inbox"' aria-label="Goal">
+      <button id="start">Start task</button><button id="audit">Run account check</button></div>
+  </section>
+  <section class="panel"><h2>Action log</h2><ul id="actions"></ul></section>
+</div>
+<div>
+  <section class="panel"><h2>Findings</h2><ul id="findings"><li class="muted">Nothing found yet.</li></ul></section>
+  <section class="panel"><h2>Alerts sent to caregiver</h2><ul id="notes"><li class="muted">None.</li></ul></section>
+  <section class="panel"><h2>Settings</h2>
+    <div class="row"><label for="cap">Spending limit per task $</label><input id="cap" type="number" min="0" step="1" style="width:110px"></div>
+    <div class="row"><label for="allow">Safe sites</label><input id="allow" size="38"></div>
+    <div class="row"><label for="access">Accessibility</label>
+      <select id="access"><option value="blind">Blind</option><option value="low_vision">Low vision</option>
+      <option value="deaf">Deaf / hard of hearing</option><option value="limited_mobility">Limited mobility</option></select>
+      <button id="save">Save</button><span class="muted" id="saved"></span></div>
+  </section>
+</div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b || {})}).then(r => r.json());
+const when = ts => new Date(ts * 1000).toLocaleTimeString();
+let settingsLoaded = false;
+
+function render(s) {
+  $('mode').textContent = 'Chert: ' + s.chert_mode;
+  $('who').textContent = `Watching over ${s.settings.profile.name} · caregiver ${s.settings.caregiver.name}`;
+  $('approvals-panel').style.display = s.pending.length ? '' : 'none';
+  $('approvals').innerHTML = s.pending.map(p => {
+    const got = Object.keys(p.got), left = Math.max(0, Math.round(p.expires - Date.now() / 1000));
+    return `<div class="approval"><div><strong>${esc(p.description)}</strong></div>
+      <small>Needs: ${p.need.map(n => (got.includes(n) ? '✅ ' : '⬜ ') + (n === 'voice' ? 'spoken yes' : 'button press')).join(' &nbsp; ')} · ${left}s left · task "${esc(p.goal)}"</small>
+      <div class="btns"><button class="go" onclick="post('/tasks/${p.task_id}/confirm',{source:'caregiver'})">Approve as caregiver</button>
+      <button class="no" onclick="post('/tasks/${p.task_id}/deny',{source:'caregiver'})">Deny</button></div></div>`; }).join('');
+  const t = s.tasks[0];
+  if (t) {
+    $('task').innerHTML = `<div class="goal">${esc(t.goal)}</div><span class="badge ${t.state}">${t.state.replace('_', ' ')}</span>
+      ${t.outcome === 'blocked' ? '<span class="badge blocked">stopped for safety</span>' : ''}
+      <div style="margin-top:8px">${esc(t.summary)}</div>` +
+      (['done','failed','cancelled'].includes(t.state) ? '' : ` <button onclick="post('/tasks/${t.id}/cancel')">Cancel</button>`);
+    $('narration').innerHTML = t.narration.slice(-12).map(n => `<li>${esc(n)}</li>`).join('');
+    $('narration').scrollTop = 1e6;
+    if (t.screenshot_url && $('shot').dataset.src !== t.screenshot_url) { $('shot').src = t.screenshot_url; $('shot').dataset.src = t.screenshot_url; }
+    $('shot').style.display = t.screenshot_url ? 'block' : 'none';
+  }
+  $('findings').innerHTML = s.findings.filter(f => f.severity !== 'low').sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1) || b.id - a.id).map(f => `<li><span class="badge ${f.severity}">${f.severity}</span>
+    <strong>${esc(f.title)}</strong> <span class="muted">${when(f.ts)}</span><div>${esc(f.explanation)}</div>
+    <details><summary class="muted">Evidence</summary><code>${esc(JSON.stringify(f.evidence))}</code></details></li>`).join('')
+    || '<li class="muted">Nothing found yet.</li>';
+  $('notes').innerHTML = s.notifications.map(n => `<li><span class="muted">${when(n.ts)}</span> ${esc(n.text)}</li>`).join('') || '<li class="muted">None.</li>';
+  $('actions').innerHTML = s.actions.map(a => { const el = a.element ? JSON.parse(a.element) : null;
+    return `<li><span class="badge ${a.decision}">${a.decision}</span> <strong>${esc(a.kind)}</strong>
+      ${el ? '“' + esc(el.name) + '”' : ''} <span class="muted">${esc(a.classification)} · tier ${a.tier} · ${when(a.ts)}</span>
+      <div class="muted">${esc(a.reason)}</div><code>${esc(a.url)}</code></li>`; }).join('');
+  if (!settingsLoaded) { settingsLoaded = true; $('cap').value = s.settings.spending_cap; $('allow').value = s.settings.allowlist.join(', ');
+    $('access').value = (s.settings.profile.accessibility || [])[0] || 'low_vision'; window._profile = s.settings.profile; }
+}
+async function poll() { try { render(await (await fetch('/state')).json()); } catch (e) {} setTimeout(poll, 1000); }
+$('start').onclick = () => { const g = $('goal').value.trim(); if (g) { post('/tasks', {goal: g}); $('goal').value = ''; } };
+$('goal').addEventListener('keydown', e => { if (e.key === 'Enter') $('start').click(); });
+$('audit').onclick = () => post('/audit');
+$('kill').onclick = () => post('/kill');
+$('save').onclick = async () => {
+  await post('/settings', {spending_cap: parseFloat($('cap').value) || 0,
+    allowlist: $('allow').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+    profile: {...window._profile, accessibility: [$('access').value]}});
+  $('saved').textContent = 'Saved'; setTimeout(() => $('saved').textContent = '', 1500); };
+poll();
+</script>
+</body></html>

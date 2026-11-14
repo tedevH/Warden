@@ -13,7 +13,7 @@ from typing import Awaitable, Callable
 from playwright.async_api import async_playwright
 
 from .observe import Snapshot, snapshot
-from .vault import Vault
+from orchestrator.vault import Vault
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -63,11 +63,21 @@ class Blocked(Exception):
     pass
 
 
+class GuardStop(Exception):
+    """The scam guard judged the current page dangerous. The task must stop."""
+
+    def __init__(self, verdict: dict):
+        super().__init__(verdict.get("plain_explanation") or "dangerous page")
+        self.verdict = verdict
+
+
 class BrowserSession:
     def __init__(self, user="margaret", gate: Gate | None = None, headless=True,
-                 narrate: Callable[[str], None] = print, task_id="task"):
+                 narrate: Callable[[str], None] = print, task_id="task", on_page=None, screenshots=False):
         self.user, self.gate, self.headless = user, gate or ConsoleGate(), headless
         self.narrate, self.task_id = narrate, task_id
+        self.screenshots = screenshots
+        self.on_page = on_page  # async (Snapshot) -> guard verdict dict | None; runs before the planner sees a page
         self.vault = Vault()
         self.log: list[dict] = []
         self.last: Snapshot | None = None
@@ -91,8 +101,14 @@ class BrowserSession:
 
     # ---- observation ----
     async def observe(self, screenshot=False) -> Snapshot:
-        shots = DATA / "screens" / self.task_id if screenshot else None
+        shots = DATA / "screens" / self.task_id if (screenshot or self.screenshots) else None
         self.last = await snapshot(self.page, shots)
+        if self.on_page:
+            verdict = await self.on_page(self.last)
+            self.last.guard = verdict
+            if verdict and verdict.get("verdict") == "dangerous":
+                await self.page.goto("about:blank")  # close the dangerous page
+                raise GuardStop(verdict)
         return self.last
 
     async def screenshot(self) -> str:
@@ -137,7 +153,9 @@ class BrowserSession:
 
     async def click(self, ref):
         el = self._target(ref)
-        await self._check(Action("click", self.page.url, el, page_text=self.last.text))
+        fields = "\n".join(f'FIELD {e["name"]}={e.get("value", "")}' for e in self.last.elements
+                           if e["role"] == "textbox" and e.get("form") == el.get("form") and e.get("value"))
+        await self._check(Action("click", self.page.url, el, page_text=f"{fields}\n{self.last.text}"))
         self.narrate(f'Clicking "{el["name"]}"')
         await self._locator(ref).click()
         await self._settle()

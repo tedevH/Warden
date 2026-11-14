@@ -112,7 +112,12 @@ def format_element(e) -> str:
 def format_for_llm(snap: Snapshot, max_text=6000) -> str:
     body = _neutralise(snap.text[:max_text])
     elems = "\n".join(_neutralise(format_element(e)) for e in snap.elements[:150])
+    notes = ""
+    g = getattr(snap, "guard", None)
+    if g and g.get("verdict") != "safe" and g.get("plain_explanation"):
+        notes = f"LEND GUARD NOTES (from Lend's own scam checker, trusted): {g['plain_explanation']}\n"
     return (
+        notes +
         f"Current page: {snap.url}\n"
         f'<untrusted_page_content url="{snap.url}">\n'
         f"TITLE: {_neutralise(snap.title)}\n\nVISIBLE TEXT:\n{body}\n\n"

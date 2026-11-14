@@ -1,46 +1,13 @@
 """Milestone 2: browser session safety without the LLM (real Chromium against the mock sites)."""
 import asyncio
-import os
-import socket
-import threading
-import time
 
 import pytest
 
-PORT = 8199
-os.environ["MOCK_PORT"] = str(PORT)
+from tests.conftest import PORT, make_vault  # noqa: E402
 
-import uvicorn  # noqa: E402
-
-from mocksites.app import app, reset_all  # noqa: E402
 from mocksites.seed import STATE  # noqa: E402
 from worker.observe import Snapshot, format_for_llm  # noqa: E402
 from worker.session import Action, Blocked, BrowserSession, ConsoleGate  # noqa: E402
-
-
-@pytest.fixture(scope="module", autouse=True)
-def mock_server():
-    socks = []
-    for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
-        s = socket.socket(fam, socket.SOCK_STREAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if fam == socket.AF_INET6:
-            s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
-        s.bind((host, PORT))
-        socks.append(s)
-    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
-    t = threading.Thread(target=lambda: asyncio.run(server.serve(sockets=socks)), daemon=True)
-    t.start()
-    while not server.started:
-        time.sleep(0.05)
-    yield
-    server.should_exit = True
-    t.join(5)
-
-
-@pytest.fixture(autouse=True)
-def fresh():
-    reset_all()
 
 
 def run(coro):
@@ -49,6 +16,7 @@ def run(coro):
 
 async def _session(fn):
     async with BrowserSession("pytest", ConsoleGate(auto_yes=True), narrate=lambda s: None, task_id="pytest") as s:
+        s.vault = make_vault()
         return await fn(s)
 
 

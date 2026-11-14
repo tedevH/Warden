@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lend approve button</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;
+       background:#0b0d10;color:#f4f6f8;font:26px/1.4 -apple-system,Segoe UI,sans-serif;text-align:center;padding:24px}
+  #what{max-width:760px;min-height:3em}
+  button{font:inherit;font-size:54px;font-weight:800;width:min(80vw,460px);height:min(80vw,460px);border-radius:50%;
+         border:10px solid #2a323c;background:#1f2630;color:#6b7684;cursor:not-allowed}
+  button.ask{background:#f59e0b;border-color:#fde68a;color:#1c1102;cursor:pointer;animation:pulse 1.2s infinite}
+  button.ok{background:#22c55e;border-color:#bbf7d0;color:#04130a}
+  @keyframes pulse{50%{transform:scale(1.04)}}
+  small{color:#9aa5b1;font-size:18px}
+</style></head>
+<body>
+<div id="what" role="status" aria-live="assertive">Nothing needs your approval.</div>
+<button id="btn" disabled aria-label="Approve">APPROVE</button>
+<small>This is Margaret's approve button. It only works after she has said yes on the call.<br>Press Space or Enter, or tap the button.</small>
+<script>
+const btn = document.getElementById('btn'), what = document.getElementById('what');
+let flash = 0;
+async function poll() {
+  try {
+    const p = await (await fetch('/pending?user_id=margaret')).json();
+    if (Date.now() < flash) return;
+    if (p.length) { btn.className = 'ask'; btn.disabled = false; what.textContent = 'Approve? ' + p[0].description; }
+    else { btn.className = ''; btn.disabled = true; what.textContent = 'Nothing needs your approval.'; }
+  } catch (e) { what.textContent = 'Lend is not running.'; }
+}
+btn.addEventListener('click', async () => {
+  const r = await (await fetch('/button', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                           body: JSON.stringify({user_id: 'margaret'})})).json();
+  if (r.applied) { btn.className = 'ok'; what.textContent = 'Button press received.'; flash = Date.now() + 1500; }
+});
+document.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !btn.disabled && e.target !== btn) btn.click(); });
+setInterval(poll, 700); poll();
+</script>
+</body></html>
