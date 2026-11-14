@@ -119,7 +119,7 @@ Sites outside the safe list open **look-only**: the guard inspects them, and not
 
 **Account watch and outgoing calls** (`orchestrator/audit.py`): with `AUDIT_INTERVAL_S` set, Warden reads bank transactions, sign-ins and the inbox on a timer and flags small test charges followed by a large one, new merchants, amounts far above the usual (median/MAD), duplicates, new-device sign-ins, security notices and phishing emails. A new suspicious charge makes Warden FaceTime the owner and open with what it found; wording is always "looks unusual, did you make this?". It doesn't call while a call is already in progress, or twice about the same finding. Scam emails go on the dashboard report instead of a phone call.
 
-**Lockdown**: `POST /lockdown` (or the dashboard) stops every task and refuses everything except looking for 30 minutes; only the caregiver can clear it.
+**Lockdown**: `POST /lockdown` stops every task and refuses everything except looking for 30 minutes. The dashboard shows a red banner, and only the caregiver can clear it there.
 
 **Tamper-evident log on Solana** (`orchestrator/chain.py`): an AI that touches your money should not be able to rewrite its own history. Every action-log entry is fingerprinted into a hash chain, and every few seconds the newest fingerprint is written to Solana (devnet) in a Memo transaction, so one transaction of 0.000005 SOL commits to the whole log so far. The dashboard links each entry to its transaction, and **Verify log** recomputes the chain and compares it with Solana; a changed or deleted entry is reported by number. Only fingerprints go on chain, never emails, amounts or names. If Solana is unreachable Warden keeps working and entries show as pending.
 
