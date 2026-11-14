@@ -110,7 +110,7 @@ def show_on_call(image_path, to=None):
 
 
 def place_outbound_call(to, opening_line):
-    """FaceTime Audio `to` from the Chert line; our agent speaks `opening_line` once Chert reports bridge_ready.
+    """FaceTime Video (LEND_OUTBOUND_VIDEO=0 for Audio) `to` from the Chert line; our agent speaks `opening_line` once Chert reports bridge_ready.
 
     Follows docs.trychert.com/facetime/outbound: put the agent in a fresh room with its audio track published,
     mint a bridge token for that room, POST /calls, then watch the call's events for bridge_ready.
@@ -126,6 +126,7 @@ def place_outbound_call(to, opening_line):
     agent_name = os.getenv("AGENT_NAME", "lend-agent")
     room = f"lend-callback-{uuid.uuid4().hex[:10]}"
     bridge_identity = f"chert-bridge-{room}"
+    video = os.getenv("LEND_OUTBOUND_VIDEO", "1") != "0"   # the caller sees Warden's call screen
 
     async def prepare():
         """Dispatch the agent and wait until it has joined the room. Returns its identity.
@@ -137,13 +138,18 @@ def place_outbound_call(to, opening_line):
             await lk.room.create_room(api.CreateRoomRequest(name=room, empty_timeout=120))
             await lk.agent_dispatch.create_dispatch(api.CreateAgentDispatchRequest(
                 agent_name=agent_name, room=room, metadata=json.dumps(
-                    {"outbound": True, "opening_line": opening_line, "bridge_identity": bridge_identity})))
+                    {"outbound": True, "opening_line": opening_line, "bridge_identity": bridge_identity,
+                     "video": video})))
+            who = None
             for _ in range(60):
                 await asyncio.sleep(0.5)
                 people = (await lk.room.list_participants(api.ListParticipantsRequest(room=room))).participants
                 if people:
-                    return people[0].identity
-            return None
+                    who = people[0].identity
+                    # a video call must have the agent's picture in the room before Chert dials
+                    if not video or any(t.type == api.TrackType.VIDEO for t in people[0].tracks):
+                        return who
+            return who
         finally:
             await lk.aclose()
 
@@ -161,10 +167,17 @@ def place_outbound_call(to, opening_line):
     bridge = (api.AccessToken(key, secret).with_identity(bridge_identity)
               .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
               .with_ttl(datetime.timedelta(minutes=30)).to_jwt())
-    res = _request("POST", "/calls", {
-        "direction": "outbound", "mode": "customer_managed", "line_id": _line_id(),
-        "destination": to, "destination_type": "phone", "media": {"audio": True, "video": False},
-        "livekit_url": url, "participant_token": bridge, "remote_participant_identity": agent_identity})
+    body = {"direction": "outbound", "mode": "customer_managed", "line_id": _line_id(),
+            "destination": to, "destination_type": "phone", "media": {"audio": True, "video": video},
+            "livekit_url": url, "participant_token": bridge, "remote_participant_identity": agent_identity}
+    try:
+        res = _request("POST", "/calls", body)
+    except RuntimeError as e:
+        if not video:
+            raise
+        log.warning("FaceTime Video was refused (%s); calling with FaceTime Audio instead", str(e)[:200])
+        body["media"]["video"] = False
+        res = _request("POST", "/calls", body)
     call_id = (res.get("data") or res).get("id")
     log.info("outbound call %s allocated to %s (agent %s)", call_id, to[:5] + "…", agent_identity)
     deadline = time.time() + 90   # ringing: speak only once Chert says the call is really connected

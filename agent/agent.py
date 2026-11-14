@@ -147,7 +147,7 @@ async def entry(ctx: agents.JobContext):
     face = Face()
     # A real-human video avatar (Anam) replaces the drawn call screen when its key is set in .env.local.
     use_avatar = bool(os.getenv("ANAM_API_KEY") and os.getenv("ANAM_AVATAR_ID")) and not outbound
-    if not use_avatar and not outbound:      # outbound calls are FaceTime Audio: no video at all
+    if not use_avatar and (not outbound or meta.get("video")):   # outbound FaceTime Video needs it before dialing
         await face.publish(ctx.room)  # FaceTime Video waits on a holding screen until the agent publishes video
         log.info("face video published")
     # Owner check: face + voice must match the enrolled owner before any tool will run.
