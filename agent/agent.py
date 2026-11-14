@@ -31,6 +31,7 @@ from livekit.agents import (Agent, AgentServer, AgentSession, RunContext, TurnHa
 from livekit.agents.utils import images  # noqa: E402
 
 from agent import chert_adapter  # noqa: E402
+from agent.face import Face  # noqa: E402
 from agent.prompts import GREETING, INSTRUCTIONS  # noqa: E402
 from agent.tools import LendTools  # noqa: E402
 
@@ -97,6 +98,13 @@ async def entry(ctx: agents.JobContext):
         log.info("room closed before a caller joined (warm room or doctor check)")
         return
     log.info("caller joined: %s", caller.identity)
+    face = Face()
+    await face.publish(ctx.room)  # FaceTime Video waits on a holding screen until the agent publishes video
+    log.info("face video published")
+    if os.getenv("LEND_LINE_TEST") == "1":
+        from agent import linetest
+        await linetest.run(ctx, caller, face)
+        return
     try:
         opening = json.loads(ctx.job.metadata or "{}").get("opening_line")
     except ValueError:
@@ -109,14 +117,44 @@ async def entry(ctx: agents.JobContext):
                           voice=os.getenv("LEND_TTS_VOICE", "fa4c9eb3dccc4806b382b40d61c6b10a")),
         turn_handling=TurnHandlingOptions(turn_detection=inference.TurnDetector()),
     )
+    # Call diagnostics: one INFO line per thing heard, said, or gone wrong.
+    session.on("user_state_changed", lambda ev: log.info("CALLER %s", ev.new_state))
+
+    def on_agent_state(ev):
+        log.info("LEND %s", ev.new_state)
+        face.state = ev.new_state if ev.new_state in ("listening", "thinking", "speaking") else "listening"
+
+    def on_item(ev):
+        if getattr(ev.item, "role", "") == "assistant" and ev.item.text_content:
+            face.caption = ev.item.text_content
+            if any(k in ev.item.text_content.lower() for k in ("scam", "fake", "blocked", "don't call", "do not call")):
+                face.alert = True
+
+    session.on("agent_state_changed", on_agent_state)
+    session.on("conversation_item_added", on_item)
+    session.on("user_input_transcribed",
+               lambda ev: ev.is_final and log.info("HEARD: %r", ev.transcript))
+    session.on("conversation_item_added",
+               lambda ev: getattr(ev.item, "role", "") == "assistant" and log.info("SAID: %r", ev.item.text_content))
+    session.on("error", lambda ev: log.error("SESSION ERROR from %s: %s", type(ev.source).__name__, ev.error))
+    session.on("close", lambda ev: log.info("SESSION CLOSED: %s", ev.reason))
+
     tools = LendTools(say=lambda text: session.say(text, allow_interruptions=True))
     try:
         profile = (await tools.settings())["profile"]
     except Exception:
         profile = {}
         log.warning("orchestrator not reachable at %s: start it with `make orchestrator`", tools.base)
-    if "deaf" in profile.get("accessibility", []) and profile.get("phone"):
-        tools.on_narration = lambda line: asyncio.to_thread(chert_adapter.send_imessage, profile["phone"], line)
+    deaf = "deaf" in profile.get("accessibility", []) and profile.get("phone")
+
+    def on_narration(line):
+        face.caption = line
+        if line.startswith(("Stopped for safety", "Blocked")):
+            face.alert = True
+        if deaf:
+            return asyncio.to_thread(chert_adapter.send_imessage, profile["phone"], line)
+
+    tools.on_narration = on_narration
 
     # Caller camera (FaceTime Video + caller capture enabled on the line): keep the newest frame for read_paper.
     latest: dict = {}
@@ -125,7 +163,28 @@ async def entry(ctx: agents.JobContext):
         async for ev in rtc.VideoStream(track):
             latest["frame"] = ev.frame
 
+    for pub in caller.track_publications.values():
+        log.info("CALLER TRACK: name=%r kind=%s source=%s muted=%s", pub.name, pub.kind, pub.source, pub.muted)
+
+    async def audio_level(track, name):
+        """Diagnostics: log how loud each caller audio track is, every 2 s."""
+        import numpy as np
+        peak, n, last = 0.0, 0, 0.0
+        async for ev in rtc.AudioStream(track):
+            data = np.frombuffer(ev.frame.data, dtype=np.int16)
+            if data.size:
+                peak = max(peak, float(np.abs(data).max()) / 32768)
+            n += 1
+            now = asyncio.get_running_loop().time()
+            if now - last >= 2:
+                log.info("CALLER AUDIO %r: peak %.3f over %d frames", name, peak, n)
+                peak, n, last = 0.0, 0, now
+
     def on_track(track, _pub, participant):
+        if participant.identity == caller.identity:
+            log.info("CALLER TRACK SUBSCRIBED: name=%r kind=%s source=%s", _pub.name, track.kind, _pub.source)
+        if track.kind == rtc.TrackKind.KIND_AUDIO and participant.identity == caller.identity:
+            latest.setdefault("audio", []).append(asyncio.create_task(audio_level(track, _pub.name)))
         if track.kind == rtc.TrackKind.KIND_VIDEO and participant.identity == caller.identity:
             log.info("caller video track subscribed")
             latest["task"] = asyncio.create_task(watch(track))
@@ -140,9 +199,12 @@ async def entry(ctx: agents.JobContext):
     await tools.presence(True)
 
     async def on_end():
+        face.stop()
         chert_adapter.set_frame_source(None)
         if latest.get("task"):
             latest["task"].cancel()
+        for t in latest.get("audio", []):
+            t.cancel()
         await tools.presence(False)
 
     ctx.add_shutdown_callback(on_end)
