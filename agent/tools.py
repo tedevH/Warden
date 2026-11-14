@@ -72,7 +72,7 @@ class LendTools:
         p = t.get("pending")
         if t["state"] == "awaiting_confirm" and p:
             if p["tier"] >= 2:
-                return (f"NEEDS APPROVAL: {p['description']}. Repeat this to them and ask them to say yes. "
+                return (f"NEEDS APPROVAL: {p['description']}. Read this to them and ask them to say yes. "
                         f"When they say yes, call confirm. They will also need to press their approve button.")
             return f"NEEDS A YES: {p['description']}. Ask if that's okay. If they say yes, call confirm."
         if t["state"] == "done":
@@ -107,9 +107,17 @@ class LendTools:
         r = (await self.http.post(f"/tasks/{self.task_id}/confirm", json={"source": "voice"})).json()
         if not r.get("ok"):
             return r.get("reason", "Nothing is waiting for approval.")
+        self._approving = p and p["expires"]
         if "button" in r.get("still_needed", []):
-            await self._emit(self.say, "Thank you. Now press your approve button.")
-        return self._describe(await self._wait(timeout=75, past_pending=p and p["expires"]))
+            await self._emit(self.on_narration, "Now press your approve button.")
+            return ("Got their yes. Now tell them: please press your approve button. "
+                    "Then call wait_for_approval.")
+        return self._describe(await self._wait(timeout=75, past_pending=self._approving))
+
+    async def wait_for_approval(self) -> str:
+        if not self.task_id:
+            return "Nothing is waiting."
+        return self._describe(await self._wait(timeout=75, past_pending=getattr(self, "_approving", None)))
 
     async def cancel(self) -> str:
         if self.task_id:

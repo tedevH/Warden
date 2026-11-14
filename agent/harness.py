@@ -27,6 +27,7 @@ TOOLS = {
     "start_task": ("Do something on a website for the caller (email, bank, food order, open a link).",
                    {"goal": {"type": "string"}}),
     "confirm": ("Record the caller's spoken yes for the approval you just read out.", {}),
+    "wait_for_approval": ("After asking them to press their approve button, wait until they press it.", {}),
     "cancel_task": ("Stop whatever Lend is doing.", {}),
     "check_accounts": ("Review bank and email for unusual charges, sign-ins and scam emails.", {}),
     "read_paper": ("Look at a letter or screen held up to the camera and say if it's a scam.", {}),
@@ -110,7 +111,7 @@ async def main():
 
     async def say_and_maybe_press(text):
         say(text)
-        if "press your approve button" in text:
+        if "approve button" in text.lower():
             asyncio.create_task(press())
 
     tools = LendTools(say=say_and_maybe_press, on_narration=lambda line: print(f"   · {line}", flush=True))

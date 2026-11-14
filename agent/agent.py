@@ -59,6 +59,11 @@ class Lend(Agent):
         return await self.t.confirm()
 
     @function_tool()
+    async def wait_for_approval(self, context: RunContext) -> str:
+        """After asking the caller to press their approve button, wait until they press it."""
+        return await self.t.wait_for_approval()
+
+    @function_tool()
     async def cancel_task(self, context: RunContext) -> str:
         """Stop whatever Lend is doing right now. Use when the caller says stop or cancel."""
         return await self.t.cancel()
@@ -110,13 +115,23 @@ async def entry(ctx: agents.JobContext):
     except ValueError:
         opening = None
 
-    session = AgentSession(
-        stt=inference.STT(model=os.getenv("LEND_STT", "assemblyai/universal-3-6-pro"), language="en"),
-        llm=inference.LLM(model=os.getenv("LEND_VOICE_LLM", "xai/grok-4.3")),
-        tts=inference.TTS(model=os.getenv("LEND_TTS", "fishaudio/s2.1-pro"),
-                          voice=os.getenv("LEND_TTS_VOICE", "fa4c9eb3dccc4806b382b40d61c6b10a")),
-        turn_handling=TurnHandlingOptions(turn_detection=inference.TurnDetector()),
-    )
+    if os.getenv("LEND_VOICE_MODE", "grok-voice") == "grok-voice":
+        # Grok hears the caller and speaks back itself (xAI Grok Voice via LiveKit Inference).
+        session = AgentSession(llm=inference.RealtimeModel(
+            model=os.getenv("LEND_GROK_VOICE_MODEL", "xai/grok-voice-3.0"),
+            voice=os.getenv("LEND_GROK_VOICE", "eve")))
+        realtime = True
+    else:
+        session = AgentSession(
+            stt=inference.STT(model=os.getenv("LEND_STT", "assemblyai/universal-3-6-pro"), language="en"),
+            llm=inference.LLM(model=os.getenv("LEND_VOICE_LLM", "xai/grok-4.3")),
+            tts=inference.TTS(model=os.getenv("LEND_TTS", "fishaudio/s2.1-pro"),
+                              voice=os.getenv("LEND_TTS_VOICE", "fa4c9eb3dccc4806b382b40d61c6b10a")),
+            turn_handling=TurnHandlingOptions(turn_detection=inference.TurnDetector()),
+        )
+        realtime = False
+    log.info("voice: %s", "Grok Voice (speech-to-speech)" if realtime else "STT -> Grok -> TTS")
+
     # Call diagnostics: one INFO line per thing heard, said, or gone wrong.
     session.on("user_state_changed", lambda ev: log.info("CALLER %s", ev.new_state))
 
@@ -139,7 +154,8 @@ async def entry(ctx: agents.JobContext):
     session.on("error", lambda ev: log.error("SESSION ERROR from %s: %s", type(ev.source).__name__, ev.error))
     session.on("close", lambda ev: log.info("SESSION CLOSED: %s", ev.reason))
 
-    tools = LendTools(say=lambda text: session.say(text, allow_interruptions=True))
+    # Grok Voice speaks for itself; only the classic pipeline can inject exact lines mid-task.
+    tools = LendTools(say=(lambda text: None) if realtime else (lambda text: session.say(text, allow_interruptions=True)))
     try:
         profile = (await tools.settings())["profile"]
     except Exception:
@@ -220,7 +236,10 @@ async def entry(ctx: agents.JobContext):
             greeted.set()
             log.info("FaceTime ready: greeting")
             if opening:
-                session.say(opening, allow_interruptions=True)
+                if realtime:
+                    session.generate_reply(instructions=f"Say exactly this to the caller: {opening}")
+                else:
+                    session.say(opening, allow_interruptions=True)
             else:
                 session.generate_reply(instructions=GREETING)
 
