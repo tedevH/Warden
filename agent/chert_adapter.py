@@ -141,14 +141,19 @@ def place_outbound_call(to, opening_line):
                     {"outbound": True, "opening_line": opening_line, "bridge_identity": bridge_identity,
                      "video": video})))
             who = None
-            for _ in range(60):
+            for _ in range(80):
                 await asyncio.sleep(0.5)
                 people = (await lk.room.list_participants(api.ListParticipantsRequest(room=room))).participants
-                if people:
-                    who = people[0].identity
-                    # a video call must have the agent's picture in the room before Chert dials
-                    if not video or any(t.type == api.TrackType.VIDEO for t in people[0].tracks):
-                        return who
+                if not people:
+                    continue
+                who = who or people[0].identity
+                if not video:
+                    return who
+                # A video call must have the picture in the room before Chert dials. Whoever publishes it is the
+                # one Chert takes audio and video from: the human avatar when it is on, otherwise the agent.
+                for p in people:
+                    if any(t.type == api.TrackType.VIDEO for t in p.tracks):
+                        return p.identity
             return who
         finally:
             await lk.aclose()
