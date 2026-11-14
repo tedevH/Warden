@@ -6,7 +6,9 @@ You call Warden (a [Chert](https://www.trychert.com) FaceTime line) and say what
 
 Pitch: *Scammers target people who can't see the warning signs. Warden sees them for you, and only for you.*
 
-![Warden's call screen: listening, working, scam blocked, not the owner](docs/warden-face-preview.png)
+![Warden on a FaceTime call: a real-time human video avatar that speaks with Grok's voice](docs/warden-avatar.jpg)
+
+*What you see when you FaceTime Warden: a live video avatar (Anam) speaking Grok's replies. This frame was captured from a call.*
 
 See [USE_CASES.md](USE_CASES.md) for who it helps and the ten situations it handles, and [DEMO.md](DEMO.md) for the three-minute video script.
 
@@ -125,7 +127,9 @@ Sites outside the safe list open **look-only**: the guard inspects them, and not
 
 ## The call screen
 
-`agent/face.py` draws what the caller sees on FaceTime Video: a glowing orb with the Warden shield, a live waveform, a status line, a security chip (Protected / Checking it's you / Owner verified / Not the owner / Scam blocked) and a large caption of what Warden is saying. With Anam keys set, a real-human video avatar is shown instead; the chips and captions exist only on the drawn screen. `LEND_AVATAR=off` forces the drawn screen.
+By default the caller sees the human avatar shown at the top (it needs Anam keys). Without them, or with `LEND_AVATAR=off`, `agent/face.py` draws the call screen below: a glowing orb with the Warden shield, a live waveform, a status line, a security chip (Protected / Checking it's you / Owner verified / Not the owner / Scam blocked) and a large caption of what Warden is saying. The chips and captions exist only on this drawn screen, which makes it the better choice for deaf and hard-of-hearing callers.
+
+![The drawn call screen: listening, working, scam blocked, not the owner](docs/warden-face-preview.png)
 
 ## Environment
 
