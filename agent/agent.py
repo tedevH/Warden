@@ -130,8 +130,11 @@ async def entry(ctx: agents.JobContext):
         return
     log.info("caller joined: %s", caller.identity)
     face = Face()
-    await face.publish(ctx.room)  # FaceTime Video waits on a holding screen until the agent publishes video
-    log.info("face video published")
+    # A real-human video avatar (Anam) replaces the drawn call screen when its key is set in .env.local.
+    use_avatar = bool(os.getenv("ANAM_API_KEY") and os.getenv("ANAM_AVATAR_ID"))
+    if not use_avatar:
+        await face.publish(ctx.room)  # FaceTime Video waits on a holding screen until the agent publishes video
+        log.info("face video published")
     # Owner check: face + voice must match the enrolled owner before any tool will run.
     check = None
     if os.getenv("LEND_VERIFY", "both") != "off":
@@ -273,9 +276,21 @@ async def entry(ctx: agents.JobContext):
         await tools.presence(False)
 
     ctx.add_shutdown_callback(on_end)
+    if use_avatar:
+        try:
+            from livekit.plugins import anam
+            avatar = anam.AvatarSession(persona_config=anam.PersonaConfig(
+                name="Warden", avatarId=os.environ["ANAM_AVATAR_ID"]))
+            await avatar.start(session, room=ctx.room)  # the avatar joins and publishes Warden's video and voice
+            log.info("human avatar started")
+        except Exception:
+            log.exception("human avatar failed to start; falling back to the drawn call screen")
+            use_avatar = False
+            await face.publish(ctx.room)
     await session.start(
         room=ctx.room, agent=Warden(tools, check),
-        room_options=room_io.RoomOptions(participant_identity=caller.identity, close_on_disconnect=True),
+        room_options=room_io.RoomOptions(participant_identity=caller.identity, close_on_disconnect=True,
+                                         audio_output=not use_avatar),  # with an avatar, it is the one audio publisher
     )
 
     greeted = asyncio.Event()

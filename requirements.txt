@@ -12,3 +12,4 @@ pillow>=11
 pyserial>=3.5
 opencv-python-headless>=4.10
 sherpa-onnx>=1.10
+livekit-plugins-anam>=1.8
