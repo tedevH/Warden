@@ -24,7 +24,6 @@ See [USE_CASES.md](USE_CASES.md) for who it helps and the ten situations it hand
 | **Gemini (Google)** | Reading a letter or screen held up to the camera. |
 | **OpenCV (YuNet, SFace) and WeSpeaker via sherpa-onnx** | Owner check: face and voice matching, run locally. |
 | **Playwright, FastAPI, SQLite** | The browser worker, the orchestrator and dashboard, and storage. |
-| **Arduino Uno** | Optional safety box (button, knob, light); simulator-tested only. |
 
 Built with Claude Code as the coding agent.
 
@@ -96,8 +95,6 @@ Sites outside the safe list open **look-only**: the guard inspects them, and not
 **Tamper-evident log on Solana** (`orchestrator/chain.py`): an AI that touches your money should not be able to rewrite its own history. Every action-log entry is fingerprinted into a hash chain, and every few seconds the newest fingerprint is written to Solana (devnet) in a Memo transaction, so one transaction of 0.000005 SOL commits to the whole log so far. The dashboard links each entry to its transaction, and **Verify log** recomputes the chain and compares it with Solana; a changed or deleted entry is reported by number. Only fingerprints go on chain, never emails, amounts or names. `make solana` creates the wallet. If Solana is unreachable Warden keeps working and entries show as pending.
 
 **Approve button**: a big on-screen button at `/button` (keyboard: Space or Enter).
-
-**Safety box (optional hardware)**: an Arduino Uno with a button, a rotary knob and a light (`hardware/`, `make box`, or `make box-sim` with no board). The button approves what Warden is waiting on; pressed at any other time it locks everything for 30 minutes, alerts the caregiver and starts an account check, and only the caregiver can clear it. The knob can lower the spending limit, never raise it. The sketch has only been run in the simulator, not on a board.
 
 **Account watch** (`orchestrator/audit.py`): reads bank transactions, sign-ins and the inbox, then flags small test charges followed by a large one, new merchants, amounts far above the usual (median/MAD), duplicates, new-device sign-ins, security notices and phishing emails. Wording is always "looks unusual, did you make this?". Set `AUDIT_INTERVAL_S` to run it on a timer.
 

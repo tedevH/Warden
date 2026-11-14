@@ -2,7 +2,7 @@ PY ?= .venv/bin/python
 MOCK_PORT ?= 8100
 CHERT ?= npx --yes @trychert/facetime@0.1.0-beta.20
 
-.PHONY: setup vault mocks orchestrator worker agent chert harness button demo redteam test box box-sim models enroll solana
+.PHONY: setup vault mocks orchestrator worker agent chert harness button demo redteam test models enroll solana
 
 setup:        ## create .venv, install deps and Chromium, create .env and the login vault
 	uv venv --python 3.12 .venv
@@ -47,11 +47,6 @@ enroll:       ## make the next FaceTime Video call an enrollment call: Warden le
 solana:       ## create a Solana devnet wallet so the action log gets anchored on chain (free test SOL)
 	$(PY) -m orchestrator.chain
 
-box:          ## safety box: connect the Arduino (button, knob, light) to Warden
-	$(PY) hardware/bridge.py
-
-box-sim:      ## safety box without an Arduino: type p (press), k 512 (knob), u (unlock)
-	$(PY) hardware/bridge.py --sim
 
 demo:         ## everything except Chert: mock sites + orchestrator + dashboard + button page + text harness
 	@trap 'kill 0' INT TERM EXIT; \
