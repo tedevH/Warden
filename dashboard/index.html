@@ -42,7 +42,11 @@
     <div class="row"><input id="goal" size="34" placeholder='Try: "read my inbox"' aria-label="Goal">
       <button id="start">Start task</button><button id="audit">Run account check</button></div>
   </section>
-  <section class="panel"><h2>Action log</h2><ul id="actions"></ul></section>
+  <section class="panel"><h2>Action log</h2>
+    <div class="row" id="chainrow" style="display:none"><span class="badge" id="chainbadge"></span>
+      <button id="verify">Verify log</button><button id="tamper" title="Demo: secretly edit a log entry">Tamper (demo)</button>
+      <span id="chainmsg" class="muted"></span></div>
+    <ul id="actions"></ul></section>
 </div>
 <div>
   <section class="panel"><h2>Findings</h2><ul id="findings"><li class="muted">Nothing found yet.</li></ul></section>
@@ -92,8 +96,12 @@ function render(s) {
     <details><summary class="muted">Evidence</summary><code>${esc(JSON.stringify(f.evidence))}</code></details></li>`).join('')
     || '<li class="muted">Nothing found yet.</li>';
   $('notes').innerHTML = s.notifications.map(n => `<li><span class="muted">${when(n.ts)}</span> ${esc(n.text)}</li>`).join('') || '<li class="muted">None.</li>';
-  $('actions').innerHTML = s.actions.map(a => { const el = a.element ? JSON.parse(a.element) : null;
-    return `<li><span class="badge ${a.decision}">${a.decision}</span> <strong>${esc(a.kind)}</strong>
+  const ch = s.chain, cl = ch.cluster;
+  $('chainrow').style.display = '';
+  $('chainbadge').textContent = ch.enabled ? `Solana ${cl}: ${ch.checkpoints} checkpoint${ch.checkpoints === 1 ? '' : 's'}, ${ch.pending} pending` + (ch.error ? ' · wallet needs test SOL' : '') : 'Solana anchoring off (make solana)';
+  $('actions').innerHTML = s.actions.map(a => { const el = a.element ? JSON.parse(a.element) : null; const sig = s.anchors[a.id];
+    const tick = sig ? `<a href="https://explorer.solana.com/tx/${sig}?cluster=${cl}" target="_blank" rel="noopener" title="Anchored on Solana">⛓ on Solana</a>` : (ch.enabled ? '<span class="muted">⛓ pending</span>' : '');
+    return `<li><span class="badge ${a.decision}">${a.decision}</span> <strong>${esc(a.kind)}</strong> ${tick}
       ${el ? '“' + esc(el.name) + '”' : ''} <span class="muted">${esc(a.classification)} · tier ${a.tier} · ${when(a.ts)}</span>
       <div class="muted">${esc(a.reason)}</div><code>${esc(a.url)}</code></li>`; }).join('');
   if (!settingsLoaded) { settingsLoaded = true; $('cap').value = s.settings.spending_cap; $('allow').value = s.settings.allowlist.join(', ');
@@ -105,6 +113,12 @@ $('goal').addEventListener('keydown', e => { if (e.key === 'Enter') $('start').c
 $('audit').onclick = () => post('/audit');
 $('kill').onclick = () => post('/kill');
 $('unlock').onclick = () => post('/unlock', {source: 'caregiver'});
+$('verify').onclick = async () => { $('chainmsg').textContent = 'Checking…';
+  const r = await fetch('/chain/verify').then(x => x.json());
+  $('chainmsg').style.color = r.ok ? 'var(--ok)' : 'var(--bad)';
+  $('chainmsg').textContent = r.ok ? `✔ ${r.entries} entries intact` + (r.checked_on_solana ? `, matched against ${r.checked_on_solana} Solana checkpoint${r.checked_on_solana === 1 ? '' : 's'}` : ' (local check)') + (r.warning ? ' · ' + r.warning : '')
+                                   : '✖ TAMPERING DETECTED: ' + r.problem; };
+$('tamper').onclick = async () => { const r = await post('/admin/tamper'); $('chainmsg').style.color = ''; $('chainmsg').textContent = r.tampered_entry ? `Entry #${r.tampered_entry} was secretly edited. Now press Verify.` : 'Nothing to tamper with yet.'; };
 $('save').onclick = async () => {
   await post('/settings', {spending_cap: parseFloat($('cap').value) || 0,
     allowlist: $('allow').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),

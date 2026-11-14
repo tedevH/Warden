@@ -52,6 +52,9 @@ Optional extras if there's time:
   bank?"* Warden: "A four hundred dollar charge at a store you haven't used, right after two small test charges.
   Did you make it?" Say *"No, freeze my card"*, then yes and the button.
 - **Scam letter.** Hold a letter up to the camera: *"Is this a scam?"* (not yet tried on a live call).
+- **Tamper-proof log (Solana).** On the dashboard's action log, click a "⛓ on Solana" link to show the entry's
+  transaction, then **Verify log** (green). Click **Tamper (demo)**, which secretly edits a log entry, then
+  **Verify log** again: "TAMPERING DETECTED: log entry #N was changed after it was recorded."
 - **Spending limit.** On the dashboard set the limit to $20 and retry the pizza: blocked.
 
 ## If something goes wrong

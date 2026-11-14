@@ -56,6 +56,7 @@ class TaskManager:
         self.tasks: dict[str, Task] = {}
         self.events: list[dict] = []
         self.on_call: dict[str, bool] = {}
+        self.chain = None                 # orchestrator.chain.Chain, set by the app
         self.lockdown_until = 0.0         # safety box: while in the future, only looking is allowed
         self.box_cap: float | None = None  # safety box knob: can lower the spending limit, never raise it
         self.alert_at = 0.0               # last time the scam guard stopped a page (the box flashes)

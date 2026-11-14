@@ -23,10 +23,12 @@ load_dotenv(ROOT / ".env")
 load_dotenv(ROOT / ".env.local", override=True)
 
 from agent import chert_adapter  # noqa: E402
+from orchestrator import chain as solana  # noqa: E402
 from orchestrator.store import Store  # noqa: E402
 from orchestrator.tasks import TERMINAL, TaskManager  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="[%(name)s %(asctime)s] %(message)s", datefmt="%H:%M:%S")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("lend.app")
 PORT = int(os.getenv("ORCH_PORT", "8200"))
 AUDIT_INTERVAL_S = float(os.getenv("AUDIT_INTERVAL_S", "0"))
@@ -40,6 +42,10 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
     async def lifespan(_app):
         global tm
         tm = manager or TaskManager(Store(), headless=os.getenv("HEADED", "0") != "1", adapter=chert_adapter)
+        tm.chain = solana.Chain(tm.store)          # tamper-evident action log (anchored on Solana when set up)
+        notary = asyncio.create_task(tm.chain.run()) if solana.enabled() and manager is None else None
+        if notary:
+            log.info("action log is being anchored on Solana %s", solana.cluster())
         loop = None
         if AUDIT_INTERVAL_S > 0 and manager is None:
             async def watch():
@@ -51,6 +57,8 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
         yield
         if loop:
             loop.cancel()
+        if notary:
+            notary.cancel()
         tm.kill_all()
 
     app = FastAPI(title="Warden orchestrator", lifespan=lifespan)
@@ -165,6 +173,30 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
     async def unlock(payload: dict = Body(default={})):
         return tm.unlock(payload.get("source", "caregiver"))
 
+    # ---- tamper-evident log (orchestrator/chain.py) ----
+    @app.get("/chain")
+    async def chain_summary():
+        return tm.chain.summary()
+
+    @app.get("/chain/verify")
+    async def chain_verify():
+        await asyncio.to_thread(tm.chain.extend)
+        try:
+            return await asyncio.to_thread(tm.chain.verify, solana.enabled())
+        except Exception as e:
+            local = await asyncio.to_thread(tm.chain.verify, False)
+            return {**local, "warning": f"Couldn't reach Solana to compare ({e}); checked the local chain only."}
+
+    @app.post("/admin/tamper")
+    async def tamper():
+        """Demo only: secretly rewrite the newest approved or blocked log entry, the way an attacker would."""
+        rows = tm.store._all("SELECT id FROM actions WHERE decision IN ('approved','blocked') ORDER BY id DESC LIMIT 1") \
+            or tm.store._all("SELECT id FROM actions ORDER BY id DESC LIMIT 1")
+        if not rows:
+            raise HTTPException(400, "The log is empty.")
+        tm.store._exec("UPDATE actions SET decision='allowed', reason='(edited)' WHERE id=?", (rows[0]["id"],))
+        return {"tampered_entry": rows[0]["id"]}
+
     @app.get("/findings")
     async def findings():
         return tm.store.findings()
@@ -190,6 +222,7 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
         tm.lockdown_until, tm.box_cap, tm.alert_at = 0.0, None, 0.0
         tm.tasks.clear()
         tm.store.wipe()
+        tm.chain.reset()
         return {"ok": True}
 
     @app.get("/state")
@@ -200,7 +233,8 @@ def make_app(manager: TaskManager | None = None) -> FastAPI:
                 "pending": [{"task_id": t.id, "goal": t.goal, **t.pending} for t in tasks if t.pending],
                 "findings": tm.store.findings(40), "actions": tm.store.actions(limit=80),
                 "notifications": tm.store.notifications(20), "settings": tm.store.settings(),
-                "on_call": tm.on_call, "box": tm.box_state(), "chert_mode": chert_adapter.mode()}
+                "on_call": tm.on_call, "box": tm.box_state(), "chain": tm.chain.summary(),
+                "anchors": {str(k): v for k, v in tm.chain.by_action().items()}, "chert_mode": chert_adapter.mode()}
 
     return app
 

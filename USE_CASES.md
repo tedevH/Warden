@@ -37,6 +37,8 @@ part, and the rules that protect your money are in code that neither a scammer n
   No prompt can raise the limit or skip the button.
 - **Passwords never reach the AI.** Logins are filled from an encrypted vault, only on the exact saved site.
 - **Only the owner can use it.** Face and voice must both match before any tool runs, checked throughout the call.
+- **It can't rewrite its own history.** Every action is fingerprinted and the fingerprints are anchored on Solana,
+  so the family can prove the log wasn't edited afterwards, by a thief or by the AI.
 - **It's tested like an attacker would.** `make redteam` runs 14 attacks against the real safety gate; all are stopped.
 
 ## Honest limits

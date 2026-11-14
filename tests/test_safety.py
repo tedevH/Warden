@@ -130,3 +130,23 @@ def test_scoring_quiet_history_and_duplicates():
     dup = _history(today) + [{"date": today.isoformat(), "merchant": "Safeway", "amount": -52.1, "key": "x"},
                              {"date": today.isoformat(), "merchant": "Safeway", "amount": -52.1, "key": "y"}]
     assert [x["kind"] for x in score_transactions(dup, today)] == ["duplicate"]
+
+
+def test_log_chain_detects_edits_and_deletions():
+    """The action log is a hash chain: changing or deleting an entry is caught (Solana not needed for this)."""
+    from orchestrator.chain import Chain
+    from orchestrator.store import Store
+    store = Store(":memory:")
+    chain = Chain(store)
+    for i in range(5):
+        store.log_action("t1", "click", f"http://pizza.localhost/{i}", {"name": "Place order"}, "money", 2,
+                         "blocked" if i == 3 else "allowed", "test")
+    assert chain.extend() == 5 and chain.extend() == 0
+    assert chain.verify(onchain=False)["ok"]
+    store._exec("UPDATE actions SET decision='allowed' WHERE id=4")          # hide a blocked payment
+    bad = chain.verify(onchain=False)
+    assert not bad["ok"] and bad["entry"] == 4
+    store._exec("UPDATE actions SET decision='blocked' WHERE id=4")
+    assert chain.verify(onchain=False)["ok"]
+    store._exec("DELETE FROM actions WHERE id=2")                            # erase an entry
+    assert not chain.verify(onchain=False)["ok"]
